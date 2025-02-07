@@ -22,7 +22,20 @@ void SpMM(
     NDArray ufeat, NDArray efeat, NDArray out, std::vector<NDArray> out_aux) {
   // TODO(zihao): format tuning
   SparseFormat format = graph->SelectFormat(0, CSC_CODE);
+  if (format == SparseFormat::kCSC) {
+    auto csc = graph->GetCSCMatrix(0);
+    //std::cout << "kernel\n";
+    /*
+std::cout << "Values: ";
+for (auto v : csc.data) std::cout << v << " ";
+std::cout << "\nRow Indices: ";
+for (auto r : csc.indices) std::cout << r << " ";
+std::cout << "\nColumn Pointers: ";
+for (auto p : csc.indptr) std::cout << p << " ";
+*/
+  } 
   const auto& bcast = CalcBcastOff(op, ufeat, efeat);
+  //print(type())
 
   ATEN_XPU_SWITCH_CUDA(graph->Context().device_type, XPU, "SpMM", {
     ATEN_ID_TYPE_SWITCH(graph->DataType(), IdType, {

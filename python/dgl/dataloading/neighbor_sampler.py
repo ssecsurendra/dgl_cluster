@@ -5,8 +5,9 @@ from ..heterograph import DGLGraph
 from ..transforms import to_block
 from ..utils import get_num_threads
 from .base import BlockSampler
-
-
+import time
+import torch
+import dgl
 class NeighborSampler(BlockSampler):
     """Sampler that builds computational dependency of node representations via
     neighbor sampling for multilayer GNN.
@@ -118,6 +119,7 @@ class NeighborSampler(BlockSampler):
     def __init__(
         self,
         fanouts,
+        # cluster_id,
         # part_array,
         edge_dir="in",
         prob=None,
@@ -136,6 +138,7 @@ class NeighborSampler(BlockSampler):
             output_device=output_device,
         )
         self.fanouts = fanouts
+        # self.cluster_id = cluster_id
         # self.part_array = part_array
         self.edge_dir = edge_dir
         if mask is not None and prob is not None:
@@ -150,7 +153,9 @@ class NeighborSampler(BlockSampler):
         self.mapping = {}
         self.g = None
 
-    def sample_blocks(self, g, seed_nodes, exclude_eids=None):
+    def sample_blocks(self, g, 
+                      # cluster_id, 
+                      seed_nodes, exclude_eids=None):
         output_nodes = seed_nodes
         blocks = []
         # sample_neighbors_fused function requires multithreading to be more efficient
@@ -176,6 +181,7 @@ class NeighborSampler(BlockSampler):
                     block = g.sample_neighbors_fused(
                         seed_nodes,
                         fanout,
+                        # cluster_id,
                         edge_dir=self.edge_dir,
                         prob=self.prob,
                         replace=self.replace,
@@ -185,6 +191,7 @@ class NeighborSampler(BlockSampler):
                     seed_nodes = block.srcdata[NID]
                     blocks.insert(0, block)
                 return seed_nodes, output_nodes, blocks
+        start_time = time.time()    
 
         for fanout in reversed(self.fanouts):
             # print("data from neighbor_sampler.py line 188 part_array passed")
@@ -192,6 +199,7 @@ class NeighborSampler(BlockSampler):
             frontier = g.sample_neighbors(
                 seed_nodes,
                 fanout,
+                # cluster_id,
                 # part_array,
                 edge_dir=self.edge_dir,
                 prob=self.prob,
@@ -199,14 +207,36 @@ class NeighborSampler(BlockSampler):
                 output_device=self.output_device,
                 exclude_edges=exclude_eids,
             )
+            #print("id for frontier:",frontier.edata["_ID"])
+            #print("Edge Data in Frontier:", frontier.edata)
+            #print("Node Data in Frontier:", frontier.ndata)
+            #print("Node id:",frontier.ndata[dgl.NID])
+            #print("Edge id:",frontier.edata[dgl.EID])
+            edge_weight=frontier.edata["_ID"]
+            frontier.edata["weight"] = edge_weight
+
+
+
             block = to_block(frontier, seed_nodes)
+            #print("keys for block",block.edata.keys())
+            #print("id for block:",block.edata["_ID"])
+            #print("weight for block:",block.edata["weight"])
+
+            #print("orig for block:",block.edata["__orig__"])
             # If sampled from graphbolt-backed DistGraph, `EID` may not be in
             # the block.
             if EID in frontier.edata.keys():
                 block.edata[EID] = frontier.edata[EID]
             seed_nodes = block.srcdata[NID]
+            #print(type(seed_nodes))
+            #print("number of seed nodes in neighbor_sampling.py",seed_nodes.numel())
+            #torch.set_printoptions(threshold=torch.inf)
+            #print("seed nodes inside neighbor_sampling.py",seed_nodes)
             blocks.insert(0, block)
-
+        #print("minibatch time in neighbor_sampling",time.time()-start_time)    
+        #print("End of sample_blocks")
+        #print("block data:",blocks.edata["_ID"])
+        #print(blocks)
         return seed_nodes, output_nodes, blocks
 
 

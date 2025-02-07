@@ -13,6 +13,7 @@
 #include <torch/script.h>
 
 #include "./utils.h"
+#include<stdio.h>
 
 namespace dgl {
 namespace sparse {
@@ -40,6 +41,7 @@ torch::Tensor SpMMNoAutoGrad(
     if (sparse_mat->HasCSR() || !sparse_mat->HasCOO()) {
       // sparse_mat->CSRPtr() will implicitly convert CSC to CSR format if CSR
       // does not exist.
+      printf("matmul/using CSR\n");
       auto csr = CSRToOldDGLCSR(sparse_mat->CSRPtr());
       aten::CSRSpMM(
           op.c_str(), reduce.c_str(), csr, dgl_dense_mat, dgl_sparse_val,
@@ -59,6 +61,7 @@ torch::Tensor SpMMNoAutoGrad(
       // sparse_mat->CSCPtr() will implicitly convert CSR to CSC format if CSR
       // does not exist.
       // Use CSC in DGL's CSRSpMM is equivalent as computing A^T @ X.
+      printf("matmul/using CSC\n");
       auto csc = CSRToOldDGLCSR(sparse_mat->CSCPtr());
       aten::CSRSpMM(
           op.c_str(), reduce.c_str(), csc, dgl_dense_mat, dgl_sparse_val,

@@ -204,6 +204,7 @@ class SAGEConv(nn.Module):
             where :math:`N_{dst}` is the number of destination nodes in the input graph,
             :math:`D_{out}` is the size of the output feature.
         """
+        #print("this ifr from sageconv: ",edge_weight)
         with graph.local_scope():
             if isinstance(feat, tuple):
                 feat_src = self.feat_drop(feat[0])
@@ -232,8 +233,8 @@ class SAGEConv(nn.Module):
             # Message Passing
             if self._aggre_type == "mean":
                 graph.srcdata["h"] = (
-                    self.fc_neigh(feat_src) if lin_before_mp else feat_src
-                )
+                        self.fc_neigh(feat_src) if lin_before_mp else feat_src
+                )        
                 graph.update_all(msg_fn, fn.mean("m", "neigh"))
                 h_neigh = graph.dstdata["neigh"]
                 if not lin_before_mp:

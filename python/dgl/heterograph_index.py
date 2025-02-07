@@ -784,6 +784,7 @@ class HeteroGraphIndex(ObjectBase):
         )
         nnz = self.num_edges(etype)
         if fmt == "csr":
+            #print("heterograph_index_csr")
             indptr = F.copy_to(F.from_dgl_nd(rst(0)), ctx)
             indices = F.copy_to(F.from_dgl_nd(rst(1)), ctx)
             shuffle = F.copy_to(F.from_dgl_nd(rst(2)), ctx)
@@ -795,9 +796,12 @@ class HeteroGraphIndex(ObjectBase):
             )[0]
             return spmat, shuffle
         elif fmt == "coo":
+            #print("heterograph_index_coo")
             idx = F.copy_to(F.from_dgl_nd(rst(0)), ctx)
             idx = F.reshape(idx, (2, nnz))
-            dat = F.ones((nnz,), dtype=F.float32, ctx=ctx)
+            #dat = F.ones((nnz,), dtype=F.float32, ctx=ctx)
+            dat = F.zeros((nnz,), dtype=F.float32, ctx=ctx)
+
             adj, shuffle_idx = F.sparse_matrix(
                 dat, ("coo", idx), (nrows, ncols)
             )

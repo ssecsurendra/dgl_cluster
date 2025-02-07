@@ -575,12 +575,36 @@ std::pair<COOMatrix, FloatArray> CSRLaborSampling(
 COOMatrix CSRRowWiseSampling1(
     CSRMatrix mat, IdArray rows, int64_t num_samples,
     const NDArray& parts_array,
+    //const NDArray& nodes_array,
     NDArray prob_or_mask = NDArray(), bool replace = true);
+
+COOMatrix CSRRowWiseSampling3(
+    CSRMatrix mat, IdArray rows, int64_t num_samples,
+    const NDArray& parts_array,
+    const NDArray& nodes_array,
+    const NDArray& seed_features,
+    NDArray prob_or_mask = NDArray(), bool replace = true);
+
+
+COOMatrix CSRRowWiseSampling2(
+    CSRMatrix mat, IdArray rows, int64_t num_samples,
+    // const NDArray& parts_array,
+    const NDArray& seed_features,
+
+    NDArray prob_or_mask = NDArray(), bool replace = true);
+
 
 COOMatrix CSRRowWiseSampling(
     CSRMatrix mat, IdArray rows, int64_t num_samples,
     // NDArray parts_array = NDArray(),
     NDArray prob_or_mask = NDArray(), bool replace = true);
+
+
+COOMatrix CSRRowWiseSampling4(
+    CSRMatrix mat, IdArray rows, int64_t num_samples,
+    // NDArray parts_array = NDArray(),
+    NDArray prob_or_mask = NDArray(), bool replace = true);
+
 
 /*!
  * @brief Randomly select a fixed number of non-zero entries along each given
@@ -940,7 +964,7 @@ CSRMatrix DisjointUnionCsr(const std::vector<CSRMatrix>& csrs);
  * edge_map = [0, 0, 0, 1, 1, 2, 3, 4, 4, 4, 4]
  *
  * @return The simplified CSRMatrix
- *         The count recording the number of duplicated edges from the original
+ *         The count recording the number of duplicated edges from the original 
  * graph. The edge mapping from the edge IDs of original graph to those of the
  *         returned graph.
  */
@@ -953,7 +977,7 @@ std::tuple<CSRMatrix, IdArray, IdArray> CSRToSimple(const CSRMatrix& csr);
  *
  * C = [[0, 0, 1, 0, 0],
  *      [1, 0, 1, 0, 0],
- *      [0, 1, 0, 0, 0],
+ *      [0, 1, 0, 0, 0],r
  *      [0, 0, 0, 0, 0],
  *      [0, 0, 0, 1, 0],
  *      [0, 0, 0, 0, 1]]

@@ -929,6 +929,7 @@ class DataLoader(torch.utils.data.DataLoader):
         graph,
         indices,
         graph_sampler,
+        # cluster_id,
         device=None,
         use_ddp=False,
         ddp_seed=0,
@@ -959,6 +960,7 @@ class DataLoader(torch.utils.data.DataLoader):
             self.graph = graph
             self.indices = indices
             self.graph_sampler = graph_sampler
+            # self.cluster_id = cluster_id
             self.device = device
             self.use_ddp = use_ddp
             self.ddp_seed = ddp_seed

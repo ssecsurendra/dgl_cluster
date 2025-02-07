@@ -72,12 +72,26 @@ def gspmm(g, op, reduce_op, lhs_data, rhs_data):
     tensor
         The result tensor.
     """
+    # print("edge_ID",g.edata["_ID"])
+    # print("edge_weight",g.edata['weight'])
+    # print("_edge_weight",g.ndata['_edge_weight'])
+    # print("g._graph: ",g._graph)
+    # print("tyep of g_graph: ",type(g._graph))
+    # print("data of g: ",g)
+    # print("edata keys in g: ", g.edata.keys())
+    # print("ndata keys in g: ", g.ndata.keys())
+    # rhs_data = g.edata["_ID"];
     if g._graph.number_of_etypes() == 1:
         if op not in ["copy_lhs", "copy_rhs"]:
             lhs_data, rhs_data = reshape_lhs_rhs(lhs_data, rhs_data)
         # With max and min reducers infinity will be returned for zero degree nodes
+        # print("lhs_data: ",lhs_data)
+        # print("lhs_data shape: ",lhs_data.shape())
+        # print("rhs_data: ",rhs_data)
+        # print("rhs_data shape: ",rhs_data, shape())
         ret = gspmm_internal(
             g._graph,
+            # g,
             op,
             "sum" if reduce_op == "mean" else reduce_op,
             lhs_data,
@@ -169,6 +183,7 @@ def _gen_spmm_func(binary_op, reduce_op):
     )
     docstring = _attach_zerodeg_note(docstring, reduce_op)
 
+    # y = g.edata['_ID']
     def func(g, x, y):
         return gspmm(g, binary_op, reduce_op, x, y)
 

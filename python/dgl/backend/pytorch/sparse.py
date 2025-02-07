@@ -158,16 +158,23 @@ def _cast_if_autocast_enabled(*args):
             args, th.get_autocast_gpu_dtype()
         )
 
-
+#HeteroGraphIndex1 = HeteroGraphIndex()
 class GSpMM(th.autograd.Function):
     @staticmethod
     def forward(ctx, gidx, op, reduce_op, X, Y):
+        #print("inside GSpMM",type(gidx))
+        #print(gidx.edges(0))
+        #print(gidx.adjacency_matrix(etype=0, transpose=False, ctx=th.device('cuda')))
+        #print(HeteroGraphIndex1.adjacency_matrix(0, False, ctx))
+        
         out, (argX, argY) = _gspmm(gidx, op, reduce_op, X, Y)
         reduce_last = _need_reduce_last_dim(X, Y)
         X_shape = X.shape if X is not None else None
         Y_shape = Y.shape if Y is not None else None
         dtype = X.dtype if X is not None else Y.dtype
         device = X.device if X is not None else Y.device
+        # print("X:",X)
+        #print("Y:",Y)
         ctx.backward_cache = (
             gidx,
             op,

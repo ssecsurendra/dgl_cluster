@@ -692,6 +692,45 @@ template COOMatrix CSRRowWiseSampling<kDGLCUDA, int64_t, uint8_t>(
     CSRMatrix, IdArray, int64_t, FloatArray, bool);
 
 template <DGLDeviceType XPU, typename IdType, typename DType>
+COOMatrix CSRRowWiseSampling4(
+    CSRMatrix mat, IdArray rows, int64_t num_picks, FloatArray prob,
+    bool replace) {
+  COOMatrix result;
+  if (num_picks == -1) {
+    // Basically this is UnitGraph::InEdges().
+    COOMatrix coo = CSRToCOO(CSRSliceRows(mat, rows), false);
+    IdArray sliced_rows = IndexSelect(rows, coo.row);
+    result =
+        COOMatrix(mat.num_rows, mat.num_cols, sliced_rows, coo.col, coo.data);
+  } else {
+    result = _CSRRowWiseSampling<XPU, IdType, DType>(
+        mat, rows, num_picks, prob, replace);
+  }
+  // NOTE(BarclayII): I'm removing the entries with zero probability after
+  // sampling. Is there a better way?
+  return _COORemoveIf<XPU, IdType, DType>(result, prob, static_cast<DType>(0));
+}
+
+template COOMatrix CSRRowWiseSampling4<kDGLCUDA, int32_t, float>(
+    CSRMatrix, IdArray, int64_t, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling4<kDGLCUDA, int64_t, float>(
+    CSRMatrix, IdArray, int64_t, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling4<kDGLCUDA, int32_t, double>(
+    CSRMatrix, IdArray, int64_t, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling4<kDGLCUDA, int64_t, double>(
+    CSRMatrix, IdArray, int64_t, FloatArray, bool);
+// These are not being called, but we instantiate them anyway to prevent missing
+// symbols in Debug build
+template COOMatrix CSRRowWiseSampling4<kDGLCUDA, int32_t, int8_t>(
+    CSRMatrix, IdArray, int64_t, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling4<kDGLCUDA, int64_t, int8_t>(
+    CSRMatrix, IdArray, int64_t, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling4<kDGLCUDA, int32_t, uint8_t>(
+    CSRMatrix, IdArray, int64_t, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling4<kDGLCUDA, int64_t, uint8_t>(
+    CSRMatrix, IdArray, int64_t, FloatArray, bool);
+
+template <DGLDeviceType XPU, typename IdType, typename DType>
 COOMatrix CSRRowWiseSampling1(
     CSRMatrix mat, IdArray rows, int64_t num_picks, const NDArray& parts_array, FloatArray prob,
     bool replace) {
@@ -729,6 +768,86 @@ template COOMatrix CSRRowWiseSampling1<kDGLCUDA, int32_t, uint8_t>(
     CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
 template COOMatrix CSRRowWiseSampling1<kDGLCUDA, int64_t, uint8_t>(
     CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+
+template <DGLDeviceType XPU, typename IdType, typename DType>
+COOMatrix CSRRowWiseSampling2(
+    CSRMatrix mat, IdArray rows, int64_t num_picks, const NDArray& seed_features, FloatArray prob,
+    bool replace) {
+  COOMatrix result;
+  if (num_picks == -1) {
+    // Basically this is UnitGraph::InEdges().
+    COOMatrix coo = CSRToCOO(CSRSliceRows(mat, rows), false);
+    IdArray sliced_rows = IndexSelect(rows, coo.row);
+    result =
+        COOMatrix(mat.num_rows, mat.num_cols, sliced_rows, coo.col, coo.data);
+  } else {
+    result = _CSRRowWiseSampling<XPU, IdType, DType>(
+        mat, rows, num_picks, prob, replace);
+  }
+  // NOTE(BarclayII): I'm removing the entries with zero probability after
+  // sampling. Is there a better way?
+  return _COORemoveIf<XPU, IdType, DType>(result, prob, static_cast<DType>(0));
+}
+
+template COOMatrix CSRRowWiseSampling2<kDGLCUDA, int32_t, float>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling2<kDGLCUDA, int64_t, float>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling2<kDGLCUDA, int32_t, double>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling2<kDGLCUDA, int64_t, double>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+// These are not being called, but we instantiate them anyway to prevent missing
+// symbols in Debug build
+template COOMatrix CSRRowWiseSampling2<kDGLCUDA, int32_t, int8_t>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling2<kDGLCUDA, int64_t, int8_t>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling2<kDGLCUDA, int32_t, uint8_t>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling2<kDGLCUDA, int64_t, uint8_t>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, FloatArray, bool);
+
+
+template <DGLDeviceType XPU, typename IdType, typename DType>
+COOMatrix CSRRowWiseSampling3(
+    CSRMatrix mat, IdArray rows, int64_t num_picks, const NDArray& parts_array, const NDArray& nodes_array, const NDArray& seed_features, FloatArray prob,
+    bool replace) {
+  COOMatrix result;
+  if (num_picks == -1) {
+    // Basically this is UnitGraph::InEdges().
+    COOMatrix coo = CSRToCOO(CSRSliceRows(mat, rows), false);
+    IdArray sliced_rows = IndexSelect(rows, coo.row);
+    result =
+        COOMatrix(mat.num_rows, mat.num_cols, sliced_rows, coo.col, coo.data);
+  } else {
+    result = _CSRRowWiseSampling<XPU, IdType, DType>(
+        mat, rows, num_picks, prob, replace);
+  }
+  // NOTE(BarclayII): I'm removing the entries with zero probability after
+  // sampling. Is there a better way?
+  return _COORemoveIf<XPU, IdType, DType>(result, prob, static_cast<DType>(0));
+}
+
+template COOMatrix CSRRowWiseSampling3<kDGLCUDA, int32_t, float>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, const NDArray&, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling3<kDGLCUDA, int64_t, float>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, const NDArray&, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling3<kDGLCUDA, int32_t, double>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, const NDArray&, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling3<kDGLCUDA, int64_t, double>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, const NDArray&, const NDArray&, FloatArray, bool);
+// These are not being called, but we instantiate them anyway to prevent missing
+// symbols in Debug build
+template COOMatrix CSRRowWiseSampling3<kDGLCUDA, int32_t, int8_t>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, const NDArray&, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling3<kDGLCUDA, int64_t, int8_t>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, const NDArray&, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling3<kDGLCUDA, int32_t, uint8_t>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, const NDArray&, const NDArray&, FloatArray, bool);
+template COOMatrix CSRRowWiseSampling3<kDGLCUDA, int64_t, uint8_t>(
+    CSRMatrix, IdArray, int64_t, const NDArray&, const NDArray&, const NDArray&, FloatArray, bool);
+
 
 }  // namespace impl
 }  // namespace aten

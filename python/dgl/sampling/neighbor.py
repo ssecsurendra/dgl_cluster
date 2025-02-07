@@ -1,14 +1,18 @@
 """Neighbor sampling APIs"""
 
 import os
-
+import numpy as np
 import torch
+import dgl
+import dgl.ndarray as dglnd
 from .metis_sampling import *
 from .. import backend as F, ndarray as nd, utils
 from .._ffi.function import _init_api
 from ..base import DGLError, EID
 from ..heterograph import DGLBlock, DGLGraph
 from .utils import EidExcluder
+import time
+_flag_call = None
 
 __all__ = [
     "sample_etype_neighbors",
@@ -387,7 +391,13 @@ def sample_neighbors(
         if exclude_edges is not None:
             eid_excluder = EidExcluder(exclude_edges)
             frontier = eid_excluder(frontier)
+    #print(type(frontier)) 
+    #print("For frontier key in edata",frontier.edata.keys())
+    #print("ID for frontier:", frontier.edata["_ID"])
+
+
     return frontier if output_device is None else frontier.to(output_device)
+
 
 
 def sample_neighbors_fused(
@@ -525,8 +535,27 @@ def _sample_neighbors(
     fused=False,
     mapping=None,
 ):
-    # print(nodes)
-    # print(type(nodes))
+    #print("_sample_neighbors")
+    #print(nodes.shape)
+    #torch.set_printoptions(threshold=torch.inf)
+    #print(type(nodes))
+    #print("seed nodes",nodes)
+
+    #print("Inside neighbor.py")
+    #print("node feature",g.ndata['feat'])
+    #seed_features = g.ndata['feat'][nodes]
+    #get the node features
+    #seed_features = g.ndata['feat']
+    #print(seed_features)
+    # Convert the PyTorch tensor to a NumPy array
+    #numpy_array = seed_features.cpu().numpy()
+    #print(seed_features)
+    # Convert the NumPy array to a DGL NDArray
+    #seed_features1 = dglnd.array(numpy_array)
+    #print(type(seed_features1))
+    #print(seed_features1.shape)
+    #print(seed_features1)
+    global _flag_call
     if not isinstance(nodes, dict):
         if len(g.ntypes) > 1:
             raise DGLError(
@@ -635,7 +664,13 @@ def _sample_neighbors(
         assert ret.is_unibipartite
 
     else: 
-        part_array = get_part_array(g)
+        start_time = time.time()
+        #num_nodes = g.num_nodes()
+        #zeros_array = np.zeros(num_nodes, dtype = np.int64)
+        #nodes_array = dgl.ndarray.array(zeros_array)
+        #part_array = get_part_array(g)
+        #print(nodes_array)
+        #print(type(nodes_array))
         # part_array = utils.prepare_tensor_dict(part_array, part_array, "part_array")
         # device = utils.context_of(part_array)
         # ctx = utils.to_dgl_context(device)
@@ -643,23 +678,58 @@ def _sample_neighbors(
         # print(type(fanout_array))
         # print(fanout)
         # print(fanout_array)
-        # print(nodes_all_types)
+        #print(type(nodes_all_types))
+        #print(nodes_all_types)
+        #print(len(nodes_all_types))
         # print(type(nodes_all_types))
         # print("array read frome neighbor.py line 631")
         # print(part_array)
         # print(type(part_array))
-        subgidx = _CAPI_DGLSampleNeighbors(
+        if _flag_call is None:
+            part_array = get_part_array(g)
+            node_array = get_representative_array(g)
+            seed_features = g.ndata['feat']
+            #print(seed_features)
+            # Convert the PyTorch tensor to a NumPy array
+            numpy_array = seed_features.cpu().numpy()
+            #print(seed_features)
+            # Convert the NumPy array to a DGL NDArray
+            seed_features1 = dglnd.array(numpy_array)
+
+            #print("insiide neighbor.py")
+            #print(node_array.shape)
+            #print(node_array)
+            subgidx = _CAPI_DGLSampleNeighbors3(
             g._graph,
             nodes_all_types,
             fanout_array,
             part_array,
+            node_array,
+            seed_features1,    
             edge_dir,
             prob_arrays,
             excluded_edges_all_t,
             replace,
-        )
+            )
+            _flag_call=1
+        else:
+            subgidx = _CAPI_DGLSampleNeighbors4(
+            g._graph,
+            nodes_all_types,
+            fanout_array,
+            # part_array,
+            #seed_features1,    
+            edge_dir,    
+            prob_arrays,
+            excluded_edges_all_t,
+            replace,
+            )
         ret = DGLGraph(subgidx.graph, g.ntypes, g.etypes)
+        # print("For ret key in edata",ret.edata.keys())
+        # print("For g key in edata",g.edata.keys())
         induced_edges = subgidx.induced_edges
+    #del numpy_array
+        #print("induced subgraph time ",time.time() - start_time)
 
     # handle features
     # (TODO) (BarclayII) DGL distributed fails with bus error, freezes, or other
@@ -697,6 +767,8 @@ def _sample_neighbors(
         for i, etype in enumerate(ret.canonical_etypes):
             ret.edges[etype].data[EID] = induced_edges[i]
 
+    #print("For ret key in edata",ret.edata.keys())
+    #print("ID for ret:", ret.edata["_ID"])
     return ret
 
 

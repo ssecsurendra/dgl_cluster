@@ -10,6 +10,7 @@
 #include <dgl/runtime/container.h>
 #include <dgl/runtime/device_api.h>
 #include <dgl/runtime/shared_mem.h>
+#include <sys/time.h>
 
 #include <sstream>
 
@@ -22,6 +23,7 @@ using namespace dgl::runtime;
 
 namespace dgl {
 namespace aten {
+struct timeval begin, end;	
 
 IdArray NewIdArray(int64_t length, DGLContext ctx, uint8_t nbits) {
   return IdArray::Empty({length}, DGLDataType{kDGLInt, nbits, 1}, ctx);
@@ -581,7 +583,7 @@ COOMatrix CSRRowWiseSampling(
     // for (auto elem : parts_array) {
         // printf("%ld ", elem);
     // }
-    printf("\n");
+    // printf("\n");
   if (IsNullArray(prob_or_mask)) {
     ATEN_CSR_SWITCH_CUDA_UVA(
         mat, rows, XPU, IdType, "CSRRowWiseSamplingUniform", {
@@ -604,11 +606,46 @@ COOMatrix CSRRowWiseSampling(
   return ret;
 }
 
+COOMatrix CSRRowWiseSampling4(
+    CSRMatrix mat, IdArray rows, int64_t num_samples, 
+    // NDArray parts_array,
+    NDArray prob_or_mask,
+    bool replace) {
+  COOMatrix ret;
+  // printf("Vector data from array.cc : ");
+    // for (auto elem : parts_array) {
+        // printf("%ld ", elem);
+    // }
+    // printf("\n");
+  if (IsNullArray(prob_or_mask)) {
+    ATEN_CSR_SWITCH_CUDA_UVA(
+        mat, rows, XPU, IdType, "CSRRowWiseSamplingUniform4", {
+          ret = impl::CSRRowWiseSamplingUniform4<XPU, IdType>(
+              mat, rows, num_samples, replace);
+        });
+  } else {
+    // prob_or_mask is pinned and rows on GPU is valid
+    CHECK_VALID_CONTEXT(prob_or_mask, rows);
+    ATEN_CSR_SWITCH_CUDA_UVA(mat, rows, XPU, IdType, "CSRRowWiseSampling", {
+      CHECK(!(prob_or_mask->dtype.bits == 8 && XPU == kDGLCUDA))
+          << "GPU sampling with masks is currently not supported yet.";
+      ATEN_FLOAT_INT8_UINT8_TYPE_SWITCH(
+          prob_or_mask->dtype, FloatType, "probability or mask", {
+            ret = impl::CSRRowWiseSampling4<XPU, IdType, FloatType>(
+                mat, rows, num_samples, prob_or_mask, replace);
+          });
+    });
+  }
+  return ret;
+}
+
 COOMatrix CSRRowWiseSampling1(
     CSRMatrix mat, IdArray rows, int64_t num_samples, 
     const NDArray& parts_array,
     NDArray prob_or_mask,
     bool replace) {
+    struct timeval begin, end;
+    gettimeofday(&begin, 0);
   COOMatrix ret;
   // printf("Vector data from array.cc : ");
     // for (auto elem : parts_array) {
@@ -623,6 +660,7 @@ COOMatrix CSRRowWiseSampling1(
   // cudaMalloc(&d_part_array, size * sizeof(int64_t));
   //
   // cudaMemcpy(d_part_array, part_array, size * sizeof(int64_t), cudaMemcpyHostToDevice);
+  gettimeofday(&begin, 0);
   if (IsNullArray(prob_or_mask)) {
     ATEN_CSR_SWITCH_CUDA_UVA(
         mat, rows, XPU, IdType, "CSRRowWiseSamplingUniform1", {
@@ -642,8 +680,116 @@ COOMatrix CSRRowWiseSampling1(
           });
     });
   }
+  gettimeofday(&end, 0);
+  long seconds = end.tv_sec - begin.tv_sec;
+  long microseconds = end.tv_usec - begin.tv_usec;
+  double elapsed = seconds + microseconds*1e-6;
+  //printf("array.cc CSRRowWiseSampling1 time  %.6f seconds.\n", elapsed);
+  return ret;
+} 
+
+COOMatrix CSRRowWiseSampling3(
+    CSRMatrix mat, IdArray rows, int64_t num_samples, 
+    const NDArray& parts_array,
+    const NDArray& nodes_array,
+    const NDArray& seed_features,
+    NDArray prob_or_mask,
+    bool replace) {
+    struct timeval begin, end;
+    gettimeofday(&begin, 0);
+  COOMatrix ret;
+  // printf("Vector data from array.cc : ");
+    // for (auto elem : parts_array) {
+        // printf("%ld ", elem);
+    // }
+    // printf("\n");
+  
+  // size_t size = parts_array->shape[0];
+  // int64_t* part_array = static_cast<int64_t*>(parts_array->data);
+  //
+  // int64_t* d_part_array;
+  // cudaMalloc(&d_part_array, size * sizeof(int64_t));
+  //
+  // cudaMemcpy(d_part_array, part_array, size * sizeof(int64_t), cudaMemcpyHostToDevice);
+  gettimeofday(&begin, 0);
+  if (IsNullArray(prob_or_mask)) {
+    ATEN_CSR_SWITCH_CUDA_UVA(
+        mat, rows, XPU, IdType, "CSRRowWiseSamplingUniform3", {
+          ret = impl::CSRRowWiseSamplingUniform3<XPU, IdType>(
+              mat, rows, num_samples, parts_array, nodes_array, seed_features, replace);
+        });
+  } else {
+    // prob_or_mask is pinned and rows on GPU is valid
+    CHECK_VALID_CONTEXT(prob_or_mask, rows);
+    ATEN_CSR_SWITCH_CUDA_UVA(mat, rows, XPU, IdType, "CSRRowWiseSampling", {
+      CHECK(!(prob_or_mask->dtype.bits == 8 && XPU == kDGLCUDA))
+          << "GPU sampling with masks is currently not supported yet.";
+      ATEN_FLOAT_INT8_UINT8_TYPE_SWITCH(
+          prob_or_mask->dtype, FloatType, "probability or mask", {
+            ret = impl::CSRRowWiseSampling3<XPU, IdType, FloatType>(
+                mat, rows, num_samples, parts_array, nodes_array, seed_features, prob_or_mask, replace);
+          });
+    });
+  }
+  gettimeofday(&end, 0);
+  long seconds = end.tv_sec - begin.tv_sec;
+  long microseconds = end.tv_usec - begin.tv_usec;
+  double elapsed = seconds + microseconds*1e-6;
+  //printf("array.cc CSRRowWiseSampling1 time  %.6f seconds.\n", elapsed);
   return ret;
 }
+
+
+COOMatrix CSRRowWiseSampling2(
+    CSRMatrix mat, IdArray rows, int64_t num_samples, 
+    // const NDArray& parts_array,
+    const NDArray& seed_features,
+ 
+    NDArray prob_or_mask,
+    bool replace) {
+  COOMatrix ret;
+  // printf("Vector data from array.cc : ");
+    // for (auto elem : parts_array) {
+        // printf("%ld ", elem);
+    // }
+    // printf("\n");
+  
+  // size_t size = parts_array->shape[0];
+  // int64_t* part_array = static_cast<int64_t*>(parts_array->data);
+  //
+  // int64_t* d_part_array;
+  // cudaMalloc(&d_part_array, size * sizeof(int64_t));
+  //
+  // cudaMemcpy(d_part_array, part_array, size * sizeof(int64_t), cudaMemcpyHostToDevice);
+  gettimeofday(&begin, 0);
+  if (IsNullArray(prob_or_mask)) {
+    ATEN_CSR_SWITCH_CUDA_UVA(
+        mat, rows, XPU, IdType, "CSRRowWiseSamplingUniform2", {
+          ret = impl::CSRRowWiseSamplingUniform2<XPU, IdType>(
+              mat, rows, num_samples, seed_features, replace);
+        });
+  } else {
+    // prob_or_mask is pinned and rows on GPU is valid
+    CHECK_VALID_CONTEXT(prob_or_mask, rows);
+    ATEN_CSR_SWITCH_CUDA_UVA(mat, rows, XPU, IdType, "CSRRowWiseSampling", {
+      CHECK(!(prob_or_mask->dtype.bits == 8 && XPU == kDGLCUDA))
+          << "GPU sampling with masks is currently not supported yet.";
+      ATEN_FLOAT_INT8_UINT8_TYPE_SWITCH(
+          prob_or_mask->dtype, FloatType, "probability or mask", {
+            ret = impl::CSRRowWiseSampling2<XPU, IdType, FloatType>(
+                mat, rows, num_samples, seed_features, prob_or_mask, replace);
+          });
+    });
+  }
+  gettimeofday(&end, 0);
+  long seconds = end.tv_sec - begin.tv_sec;
+  long microseconds = end.tv_usec - begin.tv_usec;
+  double elapsed = seconds + microseconds*1e-6;
+
+  //printf("array.cc CSRRowWiseSampling2 time %.6f seconds.\n", elapsed);
+  return ret;
+}
+
 
 
 template <typename IdType, bool map_seed_nodes>

@@ -5,7 +5,8 @@ from __future__ import absolute_import
 from . import backend as F, ndarray as nd
 from ._ffi.function import _init_api
 from .base import DGLError
-
+#from dgl import DGLHeteroGraph
+#import dgl
 
 def infer_broadcast_shape(op, shp1, shp2):
     r"""Check the shape validity, and infer the output shape given input shape and operator.
@@ -235,6 +236,32 @@ def _gspmm(gidx, op, reduce_op, u, e):
             arg_e = F.zeros(v_shp, idtype, ctx)
     arg_u_nd = to_dgl_nd_for_write(arg_u)
     arg_e_nd = to_dgl_nd_for_write(arg_e)
+    # print("arg_u_nd: ", arg_u_nd)
+    # print("arg_e_nd: ", arg_e_nd)
+    # print("u: ",u)
+    # print("e: ",e)
+    # print("use_e :", use_e)
+    # print("use_u :", use_u)
+    # #hg = DGLHeteroGraph(gidx)
+    #graph = dgl.heterograph_index.HeteroGraph(gidx)
+    #print(type(graph))
+    #print(type(hg))
+    #print(type(gidx))
+    #print("For gidx key in edata",gidx.edata.keys())
+    # print("ID for ret:", ret.edata["_ID"])
+    # Print all canonical edge types in the graph
+    # print("Canonical Edge Types:", gidx.canonical_etypes)
+    #
+    # # Loop through each edge type and list its data keys
+    # for etype in gidx.etypes:
+    #     print(f"\nEdge Type: {etype}")
+    #     print("Edge Data Keys:", gidx.edges[etype].data.keys())
+    #
+    #     # Check and print all edge data for this edge type
+    #     for key in gidx.edges[etype].data.keys():
+    #         print(f"Key: {key}, Data: {gidx.edges[etype].data[key]}")
+
+
     if gidx.num_edges(0) > 0:
         _CAPI_DGLKernelSpMM(
             gidx,

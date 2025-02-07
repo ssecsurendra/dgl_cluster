@@ -5,10 +5,12 @@
  */
 #ifndef DGL_ARRAY_CUDA_SPMM_CUH_
 #define DGL_ARRAY_CUDA_SPMM_CUH_
+#include <curand_kernel.h>
 
 #include <dgl/bcast.h>
 
 #include <limits>
+#include <iostream>
 
 #include "../../runtime/cuda/cuda_common.h"
 #include "./utils.h"
@@ -16,10 +18,13 @@
 #include "bf16.cuh"
 #include "fp16.cuh"
 #include "macro.cuh"
+#include <cuda_fp16.h>
+#include <cuda_bf16.hpp>  // for __nv_bfloat162float
 
 namespace dgl {
 
 using namespace cuda;
+using namespace std;
 
 namespace aten {
 
@@ -199,18 +204,43 @@ void CusparseCsrmm2(
     const DType* A_data, DType* C_data, int x_length) {
   // We use csrmm2 to perform following operation:
   // C = A x B, where A is a sparse matrix in csr format, B is the dense matrix
-  // for node feature tensor. However, since cusparse only supports
+  // for node feature tensor. However, since cusparse only supports
   // column-major, while our tensor is stored in row-major, the actual
   // computation is: C = trans(A x trans(B)). Currently, we use cublasXgeam to
   // implement transposition and allocate intermediate workspace memory for
   // this.
+  // Total size of the array (in bytes)
+ //  std::cout << "Total size of array (in bytes): " << sizeof(A_data) << std::endl;
+ //
+ //    // Size of one row (in bytes)
+ //  std::cout << "Size of one row (in bytes): " << sizeof(A_data[0]) << std::endl;
+ //
+ //    // Number of rows
+ //  std::cout << "Number of rows: " << sizeof(A_data) / sizeof(A_data[0]) << std::endl;
+ // // size of dtype
+ //  std::cout << "Size of DType: " << sizeof(DType) << std::endl;
+
+  // size of first element
+  //std::cout <<"size of first element " << A_data[0] << std::endl;
+  // printf("A_data: ");
+  // for(int i=0;i<2;i++)
+  //   for(int j=0;j<1;j++)
+  //     std::cout<<A_data[i+j]<<' ';
+  //   std::cout<<"\n";
+
+    // Number of columns
+  //std::cout << "Number of columns: " << sizeof(A_data[0]) / sizeof(A_data[0][0]) << std::endl;
   const int m = csr.num_rows;
   const int n = x_length;
   const int k = csr.num_cols;
   const int nnz = csr.indices->shape[0];
   const DType alpha = 1.0;
   const DType beta = 0.0;
+  static float spmm_time = 0.0;
+  //printf("Inside spmm.cuh\n");
+  //printf("\n CusparseCsrmm2 line 214");
   // device
+  //printf("m=%d,n=%d,k=%d,nnz=%d\n",m,n,k,nnz);
   auto device = runtime::DeviceAPI::Get(ctx);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
   cudaStream_t stream = runtime::getCurrentCUDAStream();
@@ -219,14 +249,74 @@ void CusparseCsrmm2(
     CUSPARSE_CALL(cusparseCreate(&(thr_entry->cusparse_handle)));
   }
   CUSPARSE_CALL(cusparseSetStream(thr_entry->cusparse_handle, stream));
+  // printf("Printing A data\n");
+  // double* h_A_data = new double[nnz];
+  //   cudaMemcpy(h_A_data, A_data, nnz * sizeof(double), cudaMemcpyDeviceToHost);
+  //   for (int i = 0; i < nnz; ++i) {
+  //       std::cout << "A_data[" << i << "] = " << h_A_data[i] << std::endl;
+  //   }
+  //   delete[] h_A_data;
+  // printf("\n");
   // all one data array
+    // Print elements of A_data
+  //std::cout << "m: " << m << "k:" << k << std::endl;
+  // Assuming A_data is a 2D array (m x k)
+  // Assuming A_data is a device pointer (allocated on GPU)
+  //copy A_data o host and printing
+//   DType* host_A_data = nullptr;
+// //DType* host_A_data;
+//
+//
+// cudaMallocHost(&host_A_data, sizeof(DType) * m * k); // Allocate pinned memory on host
+//
+// // Copy the data from device to host
+// cudaMemcpy(host_A_data, A_data, sizeof(DType) * m * k, cudaMemcpyDeviceToHost);
+//
+// // Now print the values from host_A_data
+// for (int i = 0; i < m; ++i) {
+//     for (int j = 0; j < k; ++j) {
+//         std::cout << static_cast<float>(host_A_data[i * k + j]) << " ";
+//     }
+//     std::cout << std::endl;
+// }
+//
+// // Free host memory
+// cudaFreeHost(host_A_data);
+
+  // std::cout << "Elements of A_data:" << std::endl;
+  // for (int i = 0; i < m; ++i) {
+  //   for (int j = 0; j < k; ++j) {
+  //     std::cout << static_cast<float>(A_data[i * k + j]) << " ";
+  //     //std::cout << __nv_bfloat162float(A_data[i * k + j]) << " ";
+  //     //std::cout << __half2float(A_data[i * k + j]) << " ";
+  //     //std::cout << A_data[i * k + j] << " "; // Accessing A_data[i][j]
+  //   }
+  //   std::cout << std::endl;
+  // }
+
   DType* valptr = nullptr;
   if (!A_data) {
     valptr =
         static_cast<DType*>(device->AllocWorkspace(ctx, nnz * sizeof(DType)));
     _Fill(valptr, nnz, static_cast<DType>(1.));
+    //printf("Allocating value to A data\n");
   }
+   //printf("Printing valptr\n");
+   // for (int i = 0; i < nnz; ++i) {
+   //      std::cout << "valptr[" << i << "] = " << valptr[i] << std::endl;
+   //    }
+ /* 
+  printf("Printing valptr\n");
+  DType* h_valptr = new DType[nnz];
+    cudaMemcpy(h_valptr, valptr, nnz * sizeof(DType), cudaMemcpyDeviceToHost);
+    for (int i = 0; i < nnz; ++i) {
+        std::cout << h_valptr[i];
+    }
+    delete[] h_valptr;
+  printf("\n");
+  */
 #if CUDART_VERSION >= 11000
+  //printf("1st part\n");
   cusparseSpMatDescr_t matA;
   cusparseDnMatDescr_t matB, matC;
   constexpr auto dtype = cuda_dtype<DType>::value;
@@ -248,16 +338,34 @@ void CusparseCsrmm2(
       thr_entry->cusparse_handle, transA, transB, &alpha, matA, matB, &beta,
       matC, dtype, CUSPARSE_SPMM_CSR_ALG2, &workspace_size));
   void* workspace = device->AllocWorkspace(ctx, workspace_size);
+  
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start);
+  
+
   CUSPARSE_CALL(cusparseSpMM(
       thr_entry->cusparse_handle, transA, transB, &alpha, matA, matB, &beta,
       matC, dtype, CUSPARSE_SPMM_CSR_ALG2, workspace));
   device->FreeWorkspace(ctx, workspace);
+  
+  cudaEventRecord(stop); // Record stop event after your CUDA operation
+  cudaEventSynchronize(stop); // Synchronize on stop event to ensure it has completed
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+  spmm_time += milliseconds/1000;
+  //printf("spmm time %.6f\n",spmm_time);
 
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+  
   CUSPARSE_CALL(cusparseDestroySpMat(matA));
   CUSPARSE_CALL(cusparseDestroyDnMat(matB));
   CUSPARSE_CALL(cusparseDestroyDnMat(matC));
 #else
   // allocate matrix for temporary transposed output
+  printf("2nd part\n");
   DType* trans_out =
       static_cast<DType*>(device->AllocWorkspace(ctx, m * n * sizeof(DType)));
 
@@ -302,6 +410,7 @@ void CusparseCsrmm2Hetero(
   const int nnz = csr.indices->shape[0];
   const DType alpha = 1.0;
   const DType beta = 1.0;
+  printf("\n CusparseCsrmm2Hetro line 307");
   // device
   auto device = runtime::DeviceAPI::Get(ctx);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
@@ -411,6 +520,7 @@ __global__ void SpMMCooKernel(
     const int64_t* __restrict__ ubcast_off,
     const int64_t* __restrict__ ebcast_off, int64_t ufeat_len,
     int64_t efeat_len, int64_t out_len) {
+	printf("SpMMCooKerne\n");
   // SPMM with COO.
   Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.y;
@@ -455,6 +565,7 @@ __global__ void ArgSpMMCooKernel(
     const int64_t* __restrict__ ebcast_off, int64_t ufeat_len,
     int64_t efeat_len, int64_t out_len) {
   // SPMM with COO arg max/min.
+	printf("ArgSpMMCooKernel\n");
   Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.y;
   while (ty < E) {
@@ -497,6 +608,7 @@ __global__ void SpMMCsrKernel(
     const int64_t* __restrict__ ubcast_off,
     const int64_t* __restrict__ ebcast_off, int64_t ufeat_len,
     int64_t efeat_len, int64_t out_len) {
+    printf("SpMMCsrKernel\n");	
   // SPMM with CSR.
   int ty = blockIdx.x * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.x;
@@ -555,6 +667,7 @@ __global__ void SpMMCmpCsrHeteroKernel(
     const int64_t* __restrict__ ebcast_off, int64_t ufeat_len,
     int64_t efeat_len, int64_t out_len, const int src_type, const int etype) {
   // SPMM with CSR.
+	printf("SpMMCmpCsrHeteroKernel\n");
   int ty = blockIdx.y * blockDim.y + threadIdx.y;
   const Idx stride_y = blockDim.y * gridDim.y;
   const int stride_x = blockDim.x * gridDim.x;
@@ -658,6 +771,7 @@ void SpMMCoo(
   const dim3 nthrs(ntx, nty);
   const bool use_idx = !IsNullArray(coo.data);
 
+  printf("\n spmmcookernel line 662");
   BCAST_IDX_CTX_SWITCH(bcast, use_idx, ufeat->ctx, ubcast_off, ebcast_off, {
     CUDA_KERNEL_CALL(
         (SpMMCooKernel<Idx, DType, BinaryOp, ReduceOp, UseBcast, UseIdx>),
@@ -714,6 +828,12 @@ void SpMMCsr(
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
   const bool use_idx = !IsNullArray(csr.data);
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+  cudaEventRecord(start);
+  printf("\n spmmcsrkernel call line 726");
 
   BCAST_IDX_CTX_SWITCH(
       bcast, use_idx, ufeat->ctx, ubcast_off, ebcast_off,
@@ -722,7 +842,18 @@ void SpMMCsr(
           nblks, nthrs, 0, stream, ufeat_data, efeat_data, out_data, argu_data,
           arge_data, indptr, indices, edge_map, csr.num_rows, csr.num_cols,
           ubcast_off, ebcast_off, lhs_len, rhs_len, len)});
-}
+
+  cudaEventRecord(stop); // Record stop event after your CUDA operation
+  cudaEventSynchronize(stop); // Synchronize on stop event to ensure it has completed
+
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+  printf("\nSpmm kernel time: %.6f seconds\n", milliseconds / 1000);
+
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+  }
+
 
 /**
  * @brief CUDA kernel of SpMM-Min/Max on Csr format on heterogeneous graph.
@@ -775,7 +906,8 @@ void SpMMCmpCsrHetero(
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
   const bool use_idx = !IsNullArray(csr.data);
-
+  
+  printf("spmmcmpcsrhetro kernel line 798");
   BCAST_IDX_CTX_SWITCH(
       bcast, use_idx, ufeat->ctx, ubcast_off, ebcast_off,
       {CUDA_KERNEL_CALL(
