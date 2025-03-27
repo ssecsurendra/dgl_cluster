@@ -230,6 +230,10 @@ void CusparseCsrmm2(
 
     // Number of columns
   //std::cout << "Number of columns: " << sizeof(A_data[0]) / sizeof(A_data[0][0]) << std::endl;
+  // std::cout << "Size of DType: " << sizeof(DType) << " bytes\n";
+  // std::cout << "Size of float: " << sizeof(float) << " bytes\n";
+  // std::cout << "Size of double: " << sizeof(double) << " bytes\n";
+  // std::cout << "Size of half: " << sizeof(__half) << " bytes\n";
   const int m = csr.num_rows;
   const int n = x_length;
   const int k = csr.num_cols;
@@ -249,22 +253,24 @@ void CusparseCsrmm2(
     CUSPARSE_CALL(cusparseCreate(&(thr_entry->cusparse_handle)));
   }
   CUSPARSE_CALL(cusparseSetStream(thr_entry->cusparse_handle, stream));
-  // printf("Printing A data\n");
-  // double* h_A_data = new double[nnz];
-  //   cudaMemcpy(h_A_data, A_data, nnz * sizeof(double), cudaMemcpyDeviceToHost);
-  //   for (int i = 0; i < nnz; ++i) {
-  //       std::cout << "A_data[" << i << "] = " << h_A_data[i] << std::endl;
-  //   }
-  //   delete[] h_A_data;
-  // printf("\n");
+  //correct way to print A_data
+  /*printf("Printing A data\n");
+  float* h_A_data = new float[nnz];
+    cudaMemcpy(h_A_data, A_data, nnz * sizeof(float), cudaMemcpyDeviceToHost);
+    for (int i = 0; i < nnz; ++i) {
+        std::cout << "A_data[" << i << "] = " << h_A_data[i] << std::endl;
+    }
+    delete[] h_A_data;
+  printf("\n");
+  */
   // all one data array
     // Print elements of A_data
   //std::cout << "m: " << m << "k:" << k << std::endl;
   // Assuming A_data is a 2D array (m x k)
   // Assuming A_data is a device pointer (allocated on GPU)
   //copy A_data o host and printing
-//   DType* host_A_data = nullptr;
-// //DType* host_A_data;
+//  DType* host_A_data = nullptr;
+// DType* host_A_data;
 //
 //
 // cudaMallocHost(&host_A_data, sizeof(DType) * m * k); // Allocate pinned memory on host

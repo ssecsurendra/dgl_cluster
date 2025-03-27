@@ -10,13 +10,35 @@
 #include "./ge_spmm.cuh"
 #include "./spmm.cuh"
 #include <iostream>
-
+#include <dgl/runtime/device_api.h>  // Required for DLDeviceType
+#include <cuda_runtime.h>
 namespace dgl {
 
 using namespace cuda;
+using namespace dgl::runtime;
 
 namespace aten {
 int flag=1;
+// CUDA Kernel for element-wise division
+__global__ void UpdateEfeatKernel(float* efeat, int64_t num_elements) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x; // Compute global thread index
+    if (idx < num_elements) {
+        efeat[idx] /= 10000.0f; // Perform division
+    }
+}
+
+// Host function to launch the CUDA kernel
+void UpdateEfeatGPU(float* d_efeat, int64_t num_elements) {
+    // Define CUDA thread configuration
+    int threads_per_block = 256;
+    int num_blocks = (num_elements + threads_per_block - 1) / threads_per_block;
+
+    // Launch CUDA kernel
+    UpdateEfeatKernel<<<num_blocks, threads_per_block>>>(d_efeat, num_elements);
+
+    // Synchronize to ensure computation completes before returning
+    cudaDeviceSynchronize();
+}
 
 /**
  * @brief CUDA implementation of g-SpMM on Csr format.
@@ -154,8 +176,14 @@ void SpMMCsr(
       if (!IsNullArray(csr.data)) {
         efeat = IndexSelect(efeat, csr.data);
         //printf("Checking spmsr data\n");
-      }
-  /*    
+      }   
+  //efeat = efeat.CopyTo(efeat->ctx) / 10000.0f;
+  int64_t num_elements = efeat.NumElements(); // Total number of elements
+    float* d_efeat = static_cast<float*>(efeat->data); // Get GPU pointer
+
+    // Call CUDA kernel to modify efeat in-place
+    //UpdateEfeatGPU(d_efeat, num_elements);
+  /*
   const auto& size = efeat->shape;
   int64_t row = size[0];
   int64_t col = size[1];
@@ -163,18 +191,26 @@ void SpMMCsr(
    // Print the elements of the 2D NDArray(nodes array)
   printf("Edge weight\n");
   float* edge_weight = static_cast<float*>(efeat->data);
+  // int64_t size2 = efeat.NumElements();
+  // for (int64_t i = 0; i < size2; ++i) {
+  //       edge_weight[i] /= 10000.0f;
+  //   }
   float host_edge_weight[row][col];
    // Copy the data back from GPU to CPU
   cudaMemcpy(host_edge_weight, edge_weight, row * col * sizeof(float), cudaMemcpyDeviceToHost);
   for (int64_t i = 0; i < row; ++i) {
         for (int64_t j = 0; j < col; ++j) {
             //std::cout << host_edge_weight[i][j] << ' ';
+            //host_edge_weight[i][j] /= 10000;
             printf("%f ",host_edge_weight[i][j]);
         }
         std::cout << std::endl;
     }
-  cudaFree(edge_weight);
+   // Copy modified data back to GPU (updates efeat in place)
+    //cudaMemcpy(edge_weight, host_edge_weight, row * col * sizeof(float), cudaMemcpyHostToDevice);
+  //cudaFree(edge_weight);
   */
+    
        CusparseCsrmm2<DType, IdType>(
            ufeat->ctx, csr, static_cast<DType*>(ufeat->data),
           static_cast<DType*>(efeat->data), static_cast<DType*>(out->data),

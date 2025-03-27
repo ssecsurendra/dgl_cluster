@@ -23,10 +23,19 @@
 #include <cmath>
 #include <math.h>
 #include <dgl/runtime/ndarray.h>
+#include <dgl/array.h>
+#include <dlpack/dlpack.h>
+#ifndef kDLCPU
+#define kDLCPU DLDeviceType(1)  // CPU device type in DLPack
+#endif
 using namespace dgl::cuda;
+using namespace dgl::aten;
 using namespace dgl::aten::cuda;
 using TensorDispatcher = dgl::runtime::TensorDispatcher;
-
+// struct DLDevice {
+//     DLDeviceType device_type;
+//     int device_id;
+// };
 namespace dgl {
 namespace aten {
 namespace impl {
@@ -465,12 +474,12 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
       //index_calculation(in_ptr,in_index,in_row_start,deg,cluster_id,index,num_picks);
       // copy permutation over
       __shared__ int cluster[20];
-      __shared__ int len_cluster;
-      __shared__ int x1,x2,deg1;
+      __shared__ int64_t len_cluster;
+      __shared__ int64_t x1,x2;
       __shared__ int updated_0;
-      __shared__ int reduce;
+      __shared__ float reduce,deg1;
       __shared__ int64_t updater;
-      __shared__ int count_nei[20];
+      __shared__ float count_nei[20];
       //__shared__ double similarity_array[20];
       //__shared__ double sorted[20];
       //__shared__ double* sorted_ptr;
@@ -478,15 +487,15 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
       // extern __shared__ int index_for_data[];
       __shared__ float index_for_data[10];
       __shared__ int cluster_modified[20];
-      __shared__ int count_nei_modified[20];
+      __shared__ float count_nei_modified[20];
 
       if(tid==0)
       {
         len_cluster=0;
         updater=0;
         updated_0=0;
-        reduce=0;
-        deg1=0;
+        reduce=0.0;
+        //deg1=0.0;
         //k=0;
         //m=0;
         //printf("Inside kernel\n");
@@ -500,7 +509,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
       if(tid<20)
       { 
         cluster[tid]=-2;
-        count_nei[tid]=0;
+        count_nei[tid]=0.0;
         //similarity_array[tid]=-2.0;
         //sorted[tid]=-2.0;
       }
@@ -514,7 +523,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         int cluster_id1 = cluster_id[nid];
         if(cluster_id1!=-1)
         {
-        atomicAdd(&count_nei[cluster_id1],1);
+        atomicAdd(&count_nei[cluster_id1],1.0);
          //count_nei[cluster_id1]+=1;
         }
         if(cluster_id1!=-1)
@@ -608,7 +617,8 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
                 cluster_modified[k] = cluster[i];
                 //count_nei_modified[k] = count_nei[i];
                 //printf("count_nei %f\n",count_nei[i]);
-                count_nei_modified[k] = (float)(count_nei[i]/deg);
+                count_nei_modified[k] = count_nei[i];
+                //count_nei_modified[k] = (float)(count_nei[i]/deg);
                 //printf("count_nei_modified %.20f\n",count_nei_modified[k]);
 
                 k++;
@@ -635,20 +645,28 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         //{
           if(len_cluster < num_picks)
           {
+            //printf("len_cluster:%ld, num_picks:%ld\n",len_cluster,num_picks);		    
             if(tid < x1)
             {
-              int k=0;
-              for(int j=0; j<len_cluster; j++)
+              int64_t k=0;
+              for(int64_t j=0; j<len_cluster; j++)
               {
                 index[j+tid*len_cluster]=cluster_modified[j];
                 if(k<x2)
                 {
-                  index_for_data[j+tid*len_cluster]=(float)(count_nei_modified[j]/(deg*(x1+1)));
+		              //printf("count_nei_modified:%f\n",count_nei_modified[j]);
+	                //printf("deg:%ld, x1:%ld, x2:%ld\n",deg,x1,x2);	  
+                  //printf("count_nei_modified1:%f\n",(float)(((int64_t)count_nei_modified[j])/deg));
+		              //printf("count_nei_modified1:%f\n",count_nei_modified[j] /deg);
+	          	  
+                  index_for_data[j+tid*len_cluster]=(count_nei_modified[j]/deg)/(x1+1);
+		              //printf("index_for_data:%f\n",index_for_data[j+tid*len_cluster]);
                   k++;
                 }
                 else
                 {
-                  index_for_data[j+tid*len_cluster]=(float)(count_nei_modified[j]/(deg*x1));
+                  index_for_data[j+tid*len_cluster]=(count_nei_modified[j]/deg)/x1;
+		  //printf("index_for_data:%.20f\n",index_for_data[j+tid*len_cluster]);
                 }
               }
             }
@@ -656,11 +674,22 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
             if(tid<x2)
             {
               index[len_cluster*x1+tid] = cluster_modified[tid];
-              index_for_data[len_cluster*x1+tid] = (float)(count_nei_modified[tid]/(deg*(x1+1)));
+              index_for_data[len_cluster*x1+tid] = (count_nei_modified[tid]/deg)/(x1+1);
+	      //printf("index_for_data:%.20f\n",index_for_data[len_cluster*x1+tid]);
 
               //printf("data coppied in index\n");
             }
           }
+	  else if(len_cluster == num_picks)
+	  {
+		if(tid<num_picks)
+		{
+			index[tid]=cluster_modified[tid];
+			index_for_data[tid]=count_nei_modified[tid]/deg;
+                        //printf("index_for_data1:%.20f\n",index_for_data[tid]);
+
+		}
+	  }
           else
         {
             // if(tid<num_picks)
@@ -731,8 +760,8 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
            // }
            if(tid==0)
           {
-          for (int i = 0; i < len_cluster-1; i++) {
-           for (int j = i+1; j < len_cluster; j++) {
+          for (int64_t i = 0; i < len_cluster-1; i++) {
+           for (int64_t j = i+1; j < len_cluster; j++) {
             if (sorted[i] > sorted[j]) {
                 // Swap elements
                   //printf("block id: %d, thread id: %d, similarity[i]: %f, similarity[j]: %f\n",blockIdx.x,threadIdx.x,sorted[i], sorted[j]);
@@ -760,14 +789,14 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
                 if(fabs(similarity_array[r] - x) < epsilon)
                   {
                   index[tid] = cluster[r];
-                  index_for_data[tid] = (float)(count_nei[r]);
-                  //printf("index: %d\n",index[tid]);
+                  index_for_data[tid] = count_nei[r];
+                  //printf("index_for_data: %f\n",index_for_data[tid]);
                   }
               }
           
           if(tid==0)
           {
-          for(int m=num_picks; m<len_cluster; m++)
+          for(int64_t m=num_picks; m<len_cluster; m++)
             {
               //float epsilon = 0.000001;
               float x = sorted[m];
@@ -775,14 +804,18 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
                 if(fabs(similarity_array[r] - x) < epsilon)
                   {
                   reduce += count_nei[r];
+                  //printf("reduce:%f, count_nei:%f\n",reduce,count_nei[r]);
                   }
               }
              deg1 = deg-reduce;
+             //printf("deg:%ld, deg1:%f\n",deg,deg1);
              }
           __syncthreads();
           if(tid<num_picks)
           {
-             index_for_data[tid] = (float)(index_for_data[tid]/deg1);
+             index_for_data[tid] = index_for_data[tid]/deg1;
+             //printf("index_for_data1: %f\n",index_for_data[tid]);
+	    
                   // index_for_data[tid] = 0;
           }
         }
@@ -794,7 +827,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         if(tid < num_picks)
         {
           index[tid] = in_index[in_row_start+tid];
-          index_for_data[tid] = 1;
+          index_for_data[tid] = 1.0;
         }
       }		   
 
@@ -835,6 +868,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
       }
       __syncthreads();
       */
+
       for (int idx = threadIdx.x; idx < num_picks; idx += BLOCK_SIZE) {
         //printf("idx for computation=%d\n",idx);
         //const IdType in_idx = in_row_start + idx;
@@ -847,8 +881,8 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
 	//std::cout<<"index: "<<index[idx]<<"index for data: "<<index_for_data[idx]<<std::endl;
         out_idxs[out_row_start + idx] = data ? data[idx] : idx;
 //        out_idxs[out_row_start + idx] = data ? index_for_data[idx] : idx;
-//        out_idxs[out_row_start + idx] = index_for_data[idx]; 
-//          out_idxs[out_row_start + idx] = index_for_data[idx]; 
+//      out_idxs[out_row_start + idx] = index_for_data[idx]; 
+          //out_idxs[out_row_start + idx] = index_for_data[idx]*10000; 
           //out_idxs[out_row_start + idx] = 2.2; 
       }
     }
@@ -1868,7 +1902,8 @@ COOMatrix _CSRRowWiseSamplingUniform3(
     printf("\n");
   printf("out_idxs ");
   for(int j=0;j<new_len;j++)
-    printf("%lld ",idx1[j]);
+    //printf("%lld ",idx1[j]);
+    std::cout<<idx1[j]<<" ";
     printf("\n");
   */
 
@@ -2162,6 +2197,18 @@ COOMatrix CSRRowWiseSamplingUniform4(
     // Basically this is UnitGraph::InEdges().
     COOMatrix coo = CSRToCOO(CSRSliceRows(mat, rows), false);
     IdArray sliced_rows = IndexSelect(rows, coo.row);
+   /* if (coo.data.defined()) { // Check if coo.data exists
+        NDArray cpu_data = coo.data.CopyTo(dgl::DGLDevice{kDLCPU, 0}); // Copy to CPU
+        int64_t* data_ptr = static_cast<int64_t*>(cpu_data->data); // Cast to int64_t*
+
+        std::cout << "COO Data: ";
+        for (int64_t i = 0; i < cpu_data.NumElements(); ++i) {
+            std::cout << data_ptr[i] << " ";
+        }
+        std::cout << std::endl;
+    } else {
+        std::cout << "COO data is undefined!" << std::endl;
+    }*/
     return COOMatrix(
       mat.num_rows, mat.num_cols, sliced_rows, coo.col, coo.data);
   } else {

@@ -239,7 +239,7 @@ def _gspmm(gidx, op, reduce_op, u, e):
     # print("arg_u_nd: ", arg_u_nd)
     # print("arg_e_nd: ", arg_e_nd)
     # print("u: ",u)
-    # print("e: ",e)
+    #print("e: ",e)
     # print("use_e :", use_e)
     # print("use_u :", use_u)
     # #hg = DGLHeteroGraph(gidx)

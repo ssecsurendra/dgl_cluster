@@ -106,7 +106,7 @@ class SAGEConv(nn.Module):
         activation=None,
     ):
         super(SAGEConv, self).__init__()
-        valid_aggre_types = {"mean", "gcn", "pool", "lstm"}
+        valid_aggre_types = {"mean", "sum", "gcn", "pool", "lstm"}
         if aggregator_type not in valid_aggre_types:
             raise DGLError(
                 "Invalid aggregator_type. Must be one of {}. "
@@ -232,6 +232,7 @@ class SAGEConv(nn.Module):
 
             # Message Passing
             if self._aggre_type == "mean":
+                #print("aggregater type=mean")
                 graph.srcdata["h"] = (
                         self.fc_neigh(feat_src) if lin_before_mp else feat_src
                 )        
@@ -239,6 +240,39 @@ class SAGEConv(nn.Module):
                 h_neigh = graph.dstdata["neigh"]
                 if not lin_before_mp:
                     h_neigh = self.fc_neigh(h_neigh)
+            elif self._aggre_type == "sum":
+                #print("aggregater type=sum")
+                graph.srcdata["h"] = (                                                                                     
+                        self.fc_neigh(feat_src) if lin_before_mp else feat_src                                             
+                )                                                                                                          
+                graph.update_all(msg_fn, fn.sum("m", "neigh"))                                                            
+                h_neigh = graph.dstdata["neigh"]                                                                           
+                if not lin_before_mp:                                                                                      
+                    h_neigh = self.fc_neigh(h_neigh)         
+            # elif self._aggre_type == "sum":
+            #     check_eq_shape(feat)
+            #     graph.srcdata["h"] = (
+            #         self.fc_neigh(feat_src) if lin_before_mp else feat_src
+            #     )
+            #     if isinstance(feat, tuple):  # heterogeneous
+            #         graph.dstdata["h"] = (
+            #             self.fc_neigh(feat_dst) if lin_before_mp else feat_dst
+            #         )
+            #     else:
+            #         if graph.is_block:
+            #             graph.dstdata["h"] = graph.srcdata["h"][
+            #                 : graph.num_dst_nodes()
+            #             ]
+            #         else:
+            #             graph.dstdata["h"] = graph.srcdata["h"]
+            #     graph.update_all(msg_fn, fn.sum("m", "neigh"))
+            #     # divide in_degrees
+            #     degs = graph.in_degrees().to(feat_dst)
+            #     h_neigh = (graph.dstdata["neigh"] + graph.dstdata["h"]) / (
+            #         degs.unsqueeze(-1) + 1
+            #     )
+            #     if not lin_before_mp:
+            #         h_neigh = self.fc_neigh(h_neigh)
             elif self._aggre_type == "gcn":
                 check_eq_shape(feat)
                 graph.srcdata["h"] = (
@@ -263,6 +297,7 @@ class SAGEConv(nn.Module):
                 )
                 if not lin_before_mp:
                     h_neigh = self.fc_neigh(h_neigh)
+       
             elif self._aggre_type == "pool":
                 graph.srcdata["h"] = F.relu(self.fc_pool(feat_src))
                 graph.update_all(msg_fn, fn.max("m", "neigh"))
