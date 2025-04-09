@@ -5,22 +5,22 @@ dataset=$1
 #fanout = $2
 #batch_size = $3
 epoch=$2
-#batch_sizes=(1024 2048 4096 8192 16384 32768 65536 131072)
-batch_sizes=(2048)
-fanouts=(10)
-#fanouts=(10 15 20)
+batch_sizes=(1024 2048 4096 8192 16384 32768 65536 131072)
+#batch_sizes=(2048)
+#fanouts=(30)
+fanouts=(10 15 20 30)
 for fanout in "${fanouts[@]}"; do
   # Loop through each batch size
   for batch_size in "${batch_sizes[@]}"; do
-    sampling_time=0.0
-    training_time=0.0
-    spmm_time=0.0
-    last_spmm_time=""
-    last_cuda_sampling_time=""
+    #sampling_time=0.0
+    #training_time=0.0
+    #spmm_time=0.0
+    last_spmm_time=0.0
+    last_cuda_sampling_time=0.0
     add_spmm_time=true
     output=$(python3 node_classification1.py --dataset=$1 --batch_size=$batch_size --mode=puregpu --fan_out=$fanout,$fanout,$fanout --epoch=$2)
     #filename="SPMM_time_surendra/$1_F${fanout}_B${batch_size}_puregpu_$2.txt"
-    filename="time_surendra3_2/$1_F${fanout}_B${batch_size}_puregpu_$2.txt"
+    filename="time_surendra3_4/cluster_20/V_1_100$1_F${fanout}_B${batch_size}_puregpu_$2.txt"
     #filename="epoch1_time_surendra/$1_F${fanout}_B${batch_size}_puregpu_$2.txt"
     echo "Dataset = $1" > $filename
     #python3 node_classification.py --dataset=ogbn-products --batch_size=1024
@@ -60,7 +60,7 @@ for fanout in "${fanouts[@]}"; do
         # echo "Total sampling time :" $sampling_time ", Total training time :" $training_time >> $filename
         # echo "Total spmm time , Total sampling time" >> $filename
         # echo $spmm_time"," $sampling_time >> $filename
-        echo "last_spmm_time, last_cuda_sampling_time" >> $filename
+        echo "spmm_time, sampling_time" >> $filename
         echo "$last_spmm_time, $last_cuda_sampling_time" >> $filename
         # echo "Total sampling time : " $sampling_time/$epoch ", Total training time :" $training_time/$epoch >> $filename
         # echo $test >> $filename

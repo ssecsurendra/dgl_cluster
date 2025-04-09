@@ -23,19 +23,10 @@
 #include <cmath>
 #include <math.h>
 #include <dgl/runtime/ndarray.h>
-#include <dgl/array.h>
-#include <dlpack/dlpack.h>
-#ifndef kDLCPU
-#define kDLCPU DLDeviceType(1)  // CPU device type in DLPack
-#endif
 using namespace dgl::cuda;
-using namespace dgl::aten;
 using namespace dgl::aten::cuda;
 using TensorDispatcher = dgl::runtime::TensorDispatcher;
-// struct DLDevice {
-//     DLDeviceType device_type;
-//     int device_id;
-// };
+float sampling_time = 0.0;
 namespace dgl {
 namespace aten {
 namespace impl {
@@ -51,10 +42,8 @@ double* d_seed_features;
 //int topk_count 
 double* d_node_array;
 int64_t* nodes_info;
-float sampling_time = 0.0;
+//float sampling_time = 0.0;
 int counter = 0;
-//int flag = 0;
-//int flag1 = 0;
 int64_t n;
 //int64_t* d_n;
 
@@ -76,15 +65,14 @@ __global__ void _CSRRowWiseSampleDegreeKernel(
   const IdType* const in_rows, const IdType* const in_ptr,
   IdType* const out_deg) {
   const int tIdx = threadIdx.x + blockIdx.x * blockDim.x;
-  /*
+  /* 
   if(tIdx==0)
    {
      printf("Seed nodes ");
      for(int i=0;i<num_rows;i++)
-        printf("%ld ",in_rows[i]);
+        printf("%lld ",in_rows[i]);
      printf("\n");}
-  __syncthreads();
-   */  
+     */
   if (tIdx < num_rows) {
     const int in_row = in_rows[tIdx];
     const int out_row = tIdx;
@@ -416,18 +404,16 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
 
   } 
   __syncthreads();*/ 
- /* 
+  /* 
   if(tIdx==0)
      {
       for(int k=0;k<20 && num_rows>k;k++){
-      printf("Neighbors of %ld with cluster id ",in_rows[k]);
+      p rintf("Neighbors of %lld with cluster id ",in_rows[k]);
       for(int i= in_ptr[in_rows[k]]; i<in_ptr[in_rows[k]+1];i++)
-        printf("%ld %ld ",in_index[i],cluster_id[in_index[i]]);
+        printf("%lld %lld ",in_index[i],cluster_id[in_index[i]]);
       printf("\n");}
       printf("\n");
      }
-  
-  __syncthreads();
   */
   //printf("value of n %lld\n",n);
   int64_t out_row = blockIdx.x * TILE_SIZE;
@@ -467,35 +453,27 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         const IdType in_idx = in_row_start + idx;
         out_rows[out_row_start + idx] = row;
         out_cols[out_row_start + idx] = in_index[in_idx];
-        //out_idxs[out_row_start + idx] = data ? data[in_idx] : in_idx;
-         out_idxs[out_row_start + idx] = 1; 
+        out_idxs[out_row_start + idx] = data ? data[in_idx] : in_idx;
       }
     } else{
       //index_calculation(in_ptr,in_index,in_row_start,deg,cluster_id,index,num_picks);
       // copy permutation over
       __shared__ int cluster[20];
-      __shared__ int64_t len_cluster;
-      __shared__ int64_t x1,x2;
+      __shared__ int len_cluster;
+      __shared__ int x1,x2;
       __shared__ int updated_0;
-      __shared__ float reduce,deg1;
       __shared__ int64_t updater;
-      __shared__ float count_nei[20];
       //__shared__ double similarity_array[20];
       //__shared__ double sorted[20];
       //__shared__ double* sorted_ptr;
       extern __shared__ int index[]; //dynamic size array using extern(==fanout)
-      // extern __shared__ int index_for_data[];
-      __shared__ float index_for_data[10];
       __shared__ int cluster_modified[20];
-      __shared__ float count_nei_modified[20];
 
       if(tid==0)
       {
         len_cluster=0;
         updater=0;
         updated_0=0;
-        reduce=0.0;
-        //deg1=0.0;
         //k=0;
         //m=0;
         //printf("Inside kernel\n");
@@ -509,7 +487,6 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
       if(tid<20)
       { 
         cluster[tid]=-2;
-        count_nei[tid]=0.0;
         //similarity_array[tid]=-2.0;
         //sorted[tid]=-2.0;
       }
@@ -521,11 +498,6 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         //int length = sizeof(cluster_id) / sizeof(cluster_id[0]);
         int64_t nid = in_index[in_row_start+tid];
         int cluster_id1 = cluster_id[nid];
-        if(cluster_id1!=-1)
-        {
-        atomicAdd(&count_nei[cluster_id1],1.0);
-         //count_nei[cluster_id1]+=1;
-        }
         if(cluster_id1!=-1)
         {
           if(nodes_info[nid] == 1)
@@ -554,23 +526,11 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         } 
       } 
       __syncthreads();
-
       // if(tid<20)
       //       {
       //         printf("block id: %d, thread id: %d, cluster: %d\n",blockIdx.x,threadIdx.x,cluster[tid]);
       //       }
       //printf("Nodeinfo array updated\n");
-      /*
-      if(blockIdx.x==0 && tid==0)
-      {
-        printf("Degree:%ld\n",deg);
-        printf("counting neighbors in each cluster for %ld \n",row);
-        for(int i=0;i<20;i++)
-          printf("%d ",count_nei[i]);
-          printf("\n");
-      }
-      __syncthreads();
-      */
       if(tid==0)
       {
         for(int i=0;i<20;i++)
@@ -613,21 +573,12 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
             for(int i=0;i<20;i++)
             {
               if(cluster[i]!=-2)
-                {
-                cluster_modified[k] = cluster[i];
-                //count_nei_modified[k] = count_nei[i];
-                //printf("count_nei %f\n",count_nei[i]);
-                count_nei_modified[k] = count_nei[i];
-                //count_nei_modified[k] = (float)(count_nei[i]/deg);
-                //printf("count_nei_modified %.20f\n",count_nei_modified[k]);
-
-                k++;
-                }
+                cluster_modified[k++] = cluster[i];
             }
           }
         //printf("length calculated\n");
         /* if(tid==0)
-            {
+             {
                printf("length of cluster %d\n",len_cluster);
                for(int i=0;i<len_cluster;i++)
                     printf("%d \t",cluster_modified[i]);
@@ -645,51 +596,27 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         //{
           if(len_cluster < num_picks)
           {
-            //printf("len_cluster:%ld, num_picks:%ld\n",len_cluster,num_picks);		    
             if(tid < x1)
             {
-              int64_t k=0;
-              for(int64_t j=0; j<len_cluster; j++)
+              for(int j=0; j<len_cluster; j++)
               {
                 index[j+tid*len_cluster]=cluster_modified[j];
-                if(k<x2)
-                {
-		              //printf("count_nei_modified:%f\n",count_nei_modified[j]);
-	                //printf("deg:%ld, x1:%ld, x2:%ld\n",deg,x1,x2);	  
-                  //printf("count_nei_modified1:%f\n",(float)(((int64_t)count_nei_modified[j])/deg));
-		              //printf("count_nei_modified1:%f\n",count_nei_modified[j] /deg);
-	          	  
-                  index_for_data[j+tid*len_cluster]=(count_nei_modified[j]/deg)/(x1+1);
-		              //printf("index_for_data:%f\n",index_for_data[j+tid*len_cluster]);
-                  k++;
-                }
-                else
-                {
-                  index_for_data[j+tid*len_cluster]=(count_nei_modified[j]/deg)/x1;
-		  //printf("index_for_data:%.20f\n",index_for_data[j+tid*len_cluster]);
-                }
               }
             }
             //__syncthreads();
             if(tid<x2)
             {
               index[len_cluster*x1+tid] = cluster_modified[tid];
-              index_for_data[len_cluster*x1+tid] = (count_nei_modified[tid]/deg)/(x1+1);
-	      //printf("index_for_data:%.20f\n",index_for_data[len_cluster*x1+tid]);
-
               //printf("data coppied in index\n");
             }
           }
-	  else if(len_cluster == num_picks)
-	  {
-		if(tid<num_picks)
-		{
-			index[tid]=cluster_modified[tid];
-			index_for_data[tid]=count_nei_modified[tid]/deg;
-                        //printf("index_for_data1:%.20f\n",index_for_data[tid]);
-
-		}
-	  }
+          else if(len_cluster == num_picks)
+          {
+            if(tid<len_cluster)
+            {
+              index[tid] = cluster_modified[tid];
+            }
+          }
           else
         {
             // if(tid<num_picks)
@@ -760,9 +687,9 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
            // }
            if(tid==0)
           {
-          for (int64_t i = 0; i < len_cluster-1; i++) {
-           for (int64_t j = i+1; j < len_cluster; j++) {
-            if (sorted[i] > sorted[j]) {
+          for (int i = 0; i < len_cluster-1; i++) {
+           for (int j = i+1; j < len_cluster; j++) {
+            if (sorted[i] < sorted[j]) {
                 // Swap elements
                   //printf("block id: %d, thread id: %d, similarity[i]: %f, similarity[j]: %f\n",blockIdx.x,threadIdx.x,sorted[i], sorted[j]);
                 float temp = sorted[i];
@@ -785,49 +712,24 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
             {
               //float epsilon = 0.000001;
               float x = sorted[tid];
-              for(int r=0; r<20; r++) 
+              for(int r=0; r<20; r++)
                 if(fabs(similarity_array[r] - x) < epsilon)
                   {
                   index[tid] = cluster[r];
-                  index_for_data[tid] = count_nei[r];
-                  //printf("index_for_data: %f\n",index_for_data[tid]);
+                  //break;
+                  //printf("x=%f, neighbor choosen: %d\n",x,cluster[r]);
                   }
-              }
-          
-          if(tid==0)
-          {
-          for(int64_t m=num_picks; m<len_cluster; m++)
-            {
-              //float epsilon = 0.000001;
-              float x = sorted[m];
-              for(int r=0; r<20; r++) 
-                if(fabs(similarity_array[r] - x) < epsilon)
-                  {
-                  reduce += count_nei[r];
-                  //printf("reduce:%f, count_nei:%f\n",reduce,count_nei[r]);
-                  }
-              }
-             deg1 = deg-reduce;
-             //printf("deg:%ld, deg1:%f\n",deg,deg1);
-             }
-          __syncthreads();
-          if(tid<num_picks)
-          {
-             index_for_data[tid] = index_for_data[tid]/deg1;
-             //printf("index_for_data1: %f\n",index_for_data[tid]);
-	    
-                  // index_for_data[tid] = 0;
-          }
+              //printf("index updated\n");
+            }
+          //
         }
         //}
       }
-
       //length_cluster is zero
       else {
         if(tid < num_picks)
         {
           index[tid] = in_index[in_row_start+tid];
-          index_for_data[tid] = 1.0;
         }
       }		   
 
@@ -855,19 +757,6 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
 
       __syncthreads();
       //printf("start copie nodes\n");
-     /* 
-      if(blockIdx.x==0 && tid==0)
-      {
-        // printf("For node:%ld\n",row);
-        // for(int i=0;i<10;i++)
-        //   printf("index:%d ",index[i]);
-        //   printf("\n");
-        for(int i=0;i<10;i++)
-          printf("index_for_data:%f ",index_for_data[i]);
-          printf("\n");
-      }
-      __syncthreads();
-      */
 
       for (int idx = threadIdx.x; idx < num_picks; idx += BLOCK_SIZE) {
         //printf("idx for computation=%d\n",idx);
@@ -875,15 +764,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         //printf("perm_idx=%ld\n",perm_idx);
         out_rows[out_row_start + idx] = row;
         out_cols[out_row_start + idx] = index[idx];
-	//printf("index:%d,index for data:%d\n",index[idx],index_for_data[idx]);
-	//if(index[idx]!=index_for_data[idx])
-	  //printf("unequal\n");
-	//std::cout<<"index: "<<index[idx]<<"index for data: "<<index_for_data[idx]<<std::endl;
         out_idxs[out_row_start + idx] = data ? data[idx] : idx;
-//        out_idxs[out_row_start + idx] = data ? index_for_data[idx] : idx;
-//      out_idxs[out_row_start + idx] = index_for_data[idx]; 
-          //out_idxs[out_row_start + idx] = index_for_data[idx]*10000; 
-          //out_idxs[out_row_start + idx] = 2.2; 
       }
     }
     out_row += 1;
@@ -1696,25 +1577,8 @@ COOMatrix _CSRRowWiseSamplingUniform3(
   const IdType* data = CSRHasData(mat)
     ? static_cast<IdType*>(GetDevicePointer(mat.data))
     : nullptr;
-//   const int64_t num_nodes = mat.data->shape[0];
-//   //printf("Number of elements in graph %lld\n",num_nodes);
-//   if (data != nullptr) {
-//     IdType* host_data = new IdType[num_nodes];  // Allocate space on the host (CPU)
-//     
-//     // Copy data from device (GPU) to host (CPU)
-//     cudaMemcpy(host_data, data, num_nodes * sizeof(IdType), cudaMemcpyDeviceToHost);
-//     
-//     // Now print the data from the host
-//     printf("Printing data part of CSR\n");
-//     for (int i = 0; i < num_nodes; ++i) {
-//         std::cout << host_data[i] <<"\t";
-//     }
-//     
-//     // Clean up
-//     delete[] host_data;
-// } else {
-//     std::cout << "Data is nullptr" << std::endl;
-// }
+  const int64_t num_nodes = mat.num_rows;
+  //printf("Number of elements in graph %lld\n",num_nodes);
   //for(long long int i=0; i<num_nodes; i++)
   //printf("%lld \n",parts_array[i]);  
 
@@ -1819,7 +1683,7 @@ COOMatrix _CSRRowWiseSamplingUniform3(
     const dim3 grid((num_rows + TILE_SIZE - 1) / TILE_SIZE);
     /*
      CUDA_KERNEL_CALL(
-         (_CSRRowWiseSampleUniformKernel<IdType, TILE_SIZE>), grid, block, 0,
+       (_CSRRowWiseSampleUniformKernel<IdType, TILE_SIZE>), grid, block, 0,
          stream, random_seed, num_picks, num_rows, slice_rows, in_ptr, in_cols,
          data, out_ptr, out_rows, out_cols, out_idxs);*/
 
@@ -1838,11 +1702,11 @@ COOMatrix _CSRRowWiseSamplingUniform3(
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    //sampling_time += milliseconds/1000;
+    sampling_time += milliseconds/1000;
     //milliseconds = milliseconds/1000;
     //printf("cuda sampling time %.6f\n",milliseconds/1000);
 
-    //printf("cuda sampling time %.6f\n", sampling_time);
+    printf("cuda sampling time %.6f\n", sampling_time);
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
@@ -1869,43 +1733,30 @@ COOMatrix _CSRRowWiseSamplingUniform3(
   picked_row = picked_row.CreateView({new_len}, picked_row->dtype);
   picked_col = picked_col.CreateView({new_len}, picked_col->dtype);
   picked_idx = picked_idx.CreateView({new_len}, picked_idx->dtype);
-  // printf("new length %lld\n",new_len);
-  // printf("num_rows %lld, num_cols %lld\n",mat.num_rows,mat.num_cols);
-  //
-  // const int64_t picked_row_size = picked_row->shape[0];
-  // printf("Picked_row_size:%lld\n",picked_row_size);
-  // const int64_t picked_col_size = picked_col->shape[0];
-  // printf("Picked_col_size:%lld\n",picked_col_size);
-  // const int64_t picked_idx_size = picked_idx->shape[0];
-  // printf("Picked_idx_size:%lld\n",picked_idx_size);
-  //
-  //
- /* 
+  //printf("new length %lld\n",new_len);
+  //printf("num_rows %lld, num_cols %lld\n",mat.num_rows,mat.num_cols);
+  /*
+  const int64_t picked_row_size = picked_row->shape[0];
+  printf("Picked_row_size:%lld\n",picked_row_size);
+  const int64_t picked_col_size = picked_col->shape[0];
+  printf("Picked_col_size:%lld\n",picked_col_size);
+  */
+  /*
   IdType* column;
-  IdType* row2;
-  IdType* idx1;
+   IdType* row;
   column=(IdType*)malloc(new_len * sizeof(IdType));
-  row2=(IdType*)malloc(new_len * sizeof(IdType));
-  idx1=(IdType*)malloc(new_len * sizeof(IdType));
-
-  cudaMemcpy(row2,out_rows, new_len * sizeof(IdType), cudaMemcpyDeviceToHost);
+  row=(IdType*)malloc(new_len * sizeof(IdType));
+  cudaMemcpy(row,out_rows, new_len * sizeof(IdType), cudaMemcpyDeviceToHost);
   cudaMemcpy(column,out_cols, new_len * sizeof(IdType), cudaMemcpyDeviceToHost);
-  cudaMemcpy(idx1,out_idxs, new_len * sizeof(IdType), cudaMemcpyDeviceToHost);
-
   printf("out_rows ");
   for(int j=0;j<new_len;j++)
-    printf("%lld ",row2[j]);
+    printf("%lld ",row[j]);
     printf("\n");
   printf("out_columns ");
   for(int j=0;j<new_len;j++)
     printf("%lld ",column[j]);
     printf("\n");
-  printf("out_idxs ");
-  for(int j=0;j<new_len;j++)
-    //printf("%lld ",idx1[j]);
-    std::cout<<idx1[j]<<" ";
-    printf("\n");
-  */
+  */   
 
   // cudaFree(d_part_array);
   
@@ -2081,8 +1932,8 @@ COOMatrix _CSRRowWiseSamplingUniform4(
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    //sampling_time += milliseconds/1000;
-    //printf("cuda sapmling time %.6f\n", sampling_time);
+    sampling_time += milliseconds/1000;
+    printf("cuda sampling time %.6f\n", sampling_time);
     //printf("cuda sampling time %.6f\n",milliseconds/1000);
 
     cudaEventDestroy(start);
@@ -2197,18 +2048,6 @@ COOMatrix CSRRowWiseSamplingUniform4(
     // Basically this is UnitGraph::InEdges().
     COOMatrix coo = CSRToCOO(CSRSliceRows(mat, rows), false);
     IdArray sliced_rows = IndexSelect(rows, coo.row);
-   /* if (coo.data.defined()) { // Check if coo.data exists
-        NDArray cpu_data = coo.data.CopyTo(dgl::DGLDevice{kDLCPU, 0}); // Copy to CPU
-        int64_t* data_ptr = static_cast<int64_t*>(cpu_data->data); // Cast to int64_t*
-
-        std::cout << "COO Data: ";
-        for (int64_t i = 0; i < cpu_data.NumElements(); ++i) {
-            std::cout << data_ptr[i] << " ";
-        }
-        std::cout << std::endl;
-    } else {
-        std::cout << "COO data is undefined!" << std::endl;
-    }*/
     return COOMatrix(
       mat.num_rows, mat.num_cols, sliced_rows, coo.col, coo.data);
   } else {

@@ -407,14 +407,14 @@ if __name__ == "__main__":
     #     print("representative of {} is".format(j))
     #     print(row)
     #     print("Length of representative",len(row))
-    file_path2 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_30/products/representative.npy'
+    file_path2 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_60/reddit/representative.npy'
     # Convert the list to a NumPy array
     np_representative = np.array(representative)
 
     # Save the NumPy array to a .npy file
     np.save(file_path2, np_representative)
     node_parts_weight = node_parts_weight.tolist()
-    file_path1 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_30/products/cluster_id.txt'
+    file_path1 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_60/reddit/cluster_id.txt'
     with open(file_path1, "w") as file:
         for value in node_parts_weight:
             file.write(f"{value}\n")

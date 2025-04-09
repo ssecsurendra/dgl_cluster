@@ -361,7 +361,7 @@ void CusparseCsrmm2(
   float milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, stop);
   spmm_time += milliseconds/1000;
-  //printf("spmm time %.6f\n",spmm_time);
+  printf("spmm time %.6f\n",spmm_time);
 
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
