@@ -206,9 +206,9 @@ def train(args, device, g,
             start_x_y_time = time.time()
             x = blocks[0].srcdata["feat"]
             y = blocks[-1].dstdata["label"]
-            #print("1st layer:",blocks[0])
-            #print("2nd layer:",blocks[1])
-            #print("3rd layer:",blocks[-1])
+            #print("1st layer:",len(blocks[0].srcdata[dgl.NID]))
+            #print("2nd layer:",len(blocks[1].srcdata[dgl.NID]))
+            #print("3rd layer:",len(blocks[-1].srcdata[dgl.NID]))
             end_x_y_time = time.time()
 
             start_pred_time = time.time()
