@@ -1,6 +1,6 @@
-import dgl
 import argparse
 import numpy as np
+import dgl
 import time
 import matplotlib.pyplot as plt
 import dgl.nn as dglnn
@@ -17,7 +17,7 @@ from dgl.dataloading import (
     NeighborSampler,
 )
 from ogb.nodeproppred import DglNodePropPredDataset
-from dgl.data import CoraGraphDataset,RedditDataset,FlickrDataset
+from dgl.data import CoraGraphDataset,RedditDataset,FlickrDataset, YelpDataset
 
 
 class SAGE(nn.Module):
@@ -220,7 +220,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         default="ogbn-products",
-        #choices=["ogbn-products", "ogbn-arxiv", "ogbn-papers100M", "reddit"],
+        # choices=["ogbn-products", "ogbn-arxiv", "ogbn-papers100M", "reddit"],
         help="pass dataset",
     )
     parser.add_argument(
@@ -261,46 +261,63 @@ if __name__ == "__main__":
         dataset = AsNodePredDataset(DglNodePropPredDataset("ogbn-products"))
     elif args.dataset == "ogbn-arxiv":
         dataset = AsNodePredDataset(DglNodePropPredDataset("ogbn-arxiv"))
-    elif args.dataset == "amazon_products":
-        load_path = '/data/Dataset/gnn_dataset/amazon_products.dgl'
-        dataset, _ = dgl.load_graphs(load_path)
-    elif args.dataset == "cit-net":
-        load_path = '/data/Dataset/gnn_dataset/citations_network_graph.dgl'
-        dataset, _ = dgl.load_graphs(load_path)    
+    elif args.dataset == "yelp":
+        dataset = YelpDataset()
     else:
         dataset = AsNodePredDataset(DglNodePropPredDataset(args.dataset))
         raise ValueError("Unknown dataset: {}".format(args.dataset))
 
     g = dataset[0]
+    # g = g.to("cuda")
+    print(type(g))
     print(g)
+
+    #---------find cosin similarity of graph--------------
+    # Extract node features for all edges
+    # src, dst = g.edges()
+    # src_features = g.ndata['feat'][src]
+    # dst_features = g.ndata['feat'][dst]
+
+    # Compute cosine similarity for all edges
+    # cosine_similarities = F.cosine_similarity(src_features, dst_features)
+    # print(type(cosine_similarities))
+    # print(cosine_similarities)
+    # Print the results
+    # for (s, d), sim in zip(zip(src.tolist(), dst.tolist()), cosine_similarities.tolist()):
+    #     print(f"Edge ({s}, {d}) - Cosine Similarity: {sim}")
+    #
     out_degrees = np.array(g.out_degrees())
     max_value = np.max(out_degrees)
     avg_value = np.mean(out_degrees)
     print("maximum degree : ",max_value)
     print("Average degree : ",avg_value)
     # Count the number of nodes with in-degree less than 100
-    num_nodes_less_than_10 = len(out_degrees[out_degrees < 10])
+    num_nodes_less_than_100 = len(out_degrees[out_degrees < 100])
     num_nodes_less_than_128 = len(out_degrees[out_degrees < 128])
-    print("Total number of nodes with out-degree less than 10:", num_nodes_less_than_10)
-    print("Total number of nodes with out-degree less than 128:", num_nodes_less_than_128)
+    num_nodes_less_than_1024 = len(out_degrees[out_degrees < 1024])
+    num_nodes_less_than_1024_1 = len(out_degrees[out_degrees >= 1024])
+    print("Total number of nodes with in-degree less than 100:", num_nodes_less_than_100)
+    print("Total number of nodes with in-degree less than 1024:", num_nodes_less_than_1024)
+    print("Total number of nodes with in-degree greter than 1024:", num_nodes_less_than_1024_1)
+    print("Total number of nodes with in-degree less than 128:", num_nodes_less_than_128)
     unique_values, frequencies = np.unique(out_degrees, return_counts=True)
-
-    # Create a TSV file
-    output_file = str(args.dataset) + ".tsv"
-    # Write unique values and frequencies to the TSV file
-    np.savetxt(output_file, np.column_stack((unique_values, frequencies)), delimiter='\t', fmt='%d')
-
+    #
+    # # Create a TSV file
+    # output_file = str(args.dataset) + ".tsv"
+    # # Write unique values and frequencies to the TSV file
+    # np.savetxt(output_file, np.column_stack((unique_values, frequencies)), delimiter='\t', fmt='%d')
+    #
     plt.bar(unique_values, frequencies)
     plt.xlabel('Degree of Vertex', fontsize=12)
     plt.ylabel('Frequency', fontsize=12)
-    #plt.ylim(0, 200000)
-    #max_y = max(frequencies)
+    plt.ylim(0, 200000)
+    max_y = max(frequencies)
     highest_y = np.max(frequencies)
     highest_x = unique_values[np.argmax(frequencies)]
     plt.annotate(str(highest_y), xy=(highest_x, highest_y), ha='center', va='bottom', fontsize=18)
-
-    # Add text annotation for the highest value
-    #plt.text(unique_values[frequencies.index(max_y)], max_y, str(max_y), ha='center', va='bottom')
+    #
+    # # Add text annotation for the highest value
+    # plt.text(unique_values[frequencies.index(max_y)], max_y, str(max_y), ha='center', va='bottom')
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
     plt.yscale('log')
@@ -310,7 +327,7 @@ if __name__ == "__main__":
     plt.savefig(plot_name, format='eps')
     
 
-    g = g.to("cuda" if args.mode == "puregpu" else "cpu")
+    # g = g.to("cuda" if args.mode == "puregpu" else "cpu")
     test_mask=g.ndata['test_mask']
     test_idx = torch.nonzero(test_mask).squeeze()
 
@@ -318,14 +335,14 @@ if __name__ == "__main__":
     device = torch.device("cpu" if args.mode == "cpu" else "cuda")
 
     # create GraphSAGE model)
-    in_size = g.ndata["feat"].shape[1]
-    out_size = dataset.num_classes
-    model = SAGE(in_size, 256, out_size).to(device)
-
-    # convert model and graph to bfloat16 if needed
-    if args.dt == "bfloat16":
-        g = dgl.to_bfloat16(g)
-        model = model.to(dtype=torch.bfloat16)
+    # in_size = g.ndata["feat"].shape[1]
+    # out_size = dataset.num_classes
+    # model = SAGE(in_size, 256, out_size).to(device)
+    #
+    # # convert model and graph to bfloat16 if needed
+    # if args.dt == "bfloat16":
+    #     g = dgl.to_bfloat16(g)
+    #     model = model.to(dtype=torch.bfloat16)
 
     # out partion create array 
     #part_array = np.ones(5)

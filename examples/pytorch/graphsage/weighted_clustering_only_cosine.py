@@ -21,7 +21,7 @@ import dgl.data
 from dgl import AddSelfLoop
 from dgl.data import AsNodePredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
-from dgl.data import CiteseerGraphDataset, CoraGraphDataset, PubmedGraphDataset,WisconsinDataset,FlickrDataset,RedditDataset,YelpDataset
+from dgl.data import CiteseerGraphDataset, CoraGraphDataset, PubmedGraphDataset,WisconsinDataset,FlickrDataset,RedditDataset,YelpDataset,AmazonCoBuyComputerDataset
 
 
 #-------------------------------------Graph CONSTRUCTION USING data----------------#
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         "--dataset",
         type=str,
         default="cora",
-        #help="Dataset name ('cora', 'citeseer', 'pubmed', 'wisconsin','flickr', 'reddit', 'yelp', 'ogbn-products','ogbn-arxiv').",
+        #help="Dataset name ('cora', 'citeseer', 'pubmed', 'wisconsin','flickr', 'reddit', 'yelp', 'ogbn-products','ogbn-arxiv', 'amazon-computer').",
     )
     parser.add_argument(
         "--num_clusters",
@@ -79,6 +79,8 @@ if __name__ == "__main__":
         data = RedditDataset()   
     elif args.dataset == "yelp":
         data = YelpDataset()
+    elif args.dataset == "amazon-computer":
+        data = AmazonCoBuyComputerDataset()
     elif args.dataset == "ogbn-products":
         data = AsNodePredDataset(DglNodePropPredDataset("ogbn-products"))    
     elif args.dataset == "ogbn-arxiv":    

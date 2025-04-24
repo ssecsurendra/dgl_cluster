@@ -13,7 +13,8 @@ from ..heterograph import DGLBlock, DGLGraph
 from .utils import EidExcluder
 import time
 _flag_call = None
-
+_method = None
+_sampling_method = 0
 __all__ = [
     "sample_etype_neighbors",
     "sample_neighbors",
@@ -556,6 +557,8 @@ def _sample_neighbors(
     #print(seed_features1.shape)
     #print(seed_features1)
     global _flag_call
+    global _method
+    global _sampling_method
     if not isinstance(nodes, dict):
         if len(g.ntypes) > 1:
             raise DGLError(
@@ -685,7 +688,40 @@ def _sample_neighbors(
         # print("array read frome neighbor.py line 631")
         # print(part_array)
         # print(type(part_array))
-        if _flag_call is None:
+        #if _flag_call is None:
+        #    # part_array = get_part_array(g)
+        #    part_array, sampling_method = get_part_array(g)
+        #    node_array = get_representative_array(g)
+        #    seed_features = g.ndata['feat']
+        #    #print(seed_features)
+        #    # Convert the PyTorch tensor to a NumPy array
+        #    numpy_array = seed_features.cpu().numpy()
+        #    #print(seed_features)
+        #    # Convert the NumPy array to a DGL NDArray
+        #    seed_features1 = dglnd.array(numpy_array)
+
+        #    #print("insiide neighbor.py")
+        #    #print(node_array.shape)
+        #    #print(node_array)
+        if _method is None:
+            _sampling_method = get_method()
+            _method = 1
+        if _sampling_method == 0:
+            #print("graphsage")
+            subgidx = _CAPI_DGLSampleNeighbors(
+                    g._graph,
+                    nodes_all_types,
+                    fanout_array,
+                    # part_array,
+                    #seed_features1,    
+                    edge_dir,    
+                    prob_arrays,
+                    excluded_edges_all_t,
+                    replace,
+                    )
+        elif _flag_call is None:
+            #print("cling")    
+            # part_array = get_part_array(g)
             part_array = get_part_array(g)
             node_array = get_representative_array(g)
             seed_features = g.ndata['feat']
@@ -696,23 +732,21 @@ def _sample_neighbors(
             # Convert the NumPy array to a DGL NDArray
             seed_features1 = dglnd.array(numpy_array)
 
-            #print("insiide neighbor.py")
-            #print(node_array.shape)
-            #print(node_array)
             subgidx = _CAPI_DGLSampleNeighbors3(
-            g._graph,
-            nodes_all_types,
-            fanout_array,
-            part_array,
-            node_array,
-            seed_features1,    
-            edge_dir,
-            prob_arrays,
-            excluded_edges_all_t,
-            replace,
-            )
+                    g._graph,
+                    nodes_all_types,
+                    fanout_array,
+                    part_array,
+                    node_array,
+                    seed_features1,    
+                    edge_dir,
+                    prob_arrays,
+                    excluded_edges_all_t,
+                    replace,
+                    )
             _flag_call=1
         else:
+            #print("cling")
             subgidx = _CAPI_DGLSampleNeighbors4(
             g._graph,
             nodes_all_types,
@@ -768,6 +802,7 @@ def _sample_neighbors(
             ret.edges[etype].data[EID] = induced_edges[i]
 
     #print("For ret key in edata",ret.edata.keys())
+    #print("subgraph: ", ret)
     #print("ID for ret:", ret.edata["_ID"])
     return ret
 

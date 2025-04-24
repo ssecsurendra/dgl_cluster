@@ -10,7 +10,6 @@
 #include <dgl/runtime/tensordispatch.h>
 #include <typeinfo>
 #include <numeric>
-
 #include "../../array/cuda/atomic.cuh"
 #include "../../runtime/cuda/cuda_common.h"
 #include "./dgl_cub.cuh"
@@ -23,6 +22,7 @@
 #include <cmath>
 #include <math.h>
 #include <dgl/runtime/ndarray.h>
+#define NC 20
 using namespace dgl::cuda;
 using namespace dgl::aten::cuda;
 using TensorDispatcher = dgl::runtime::TensorDispatcher;
@@ -458,22 +458,22 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
     } else{
       //index_calculation(in_ptr,in_index,in_row_start,deg,cluster_id,index,num_picks);
       // copy permutation over
-      __shared__ int cluster[20];
+      __shared__ int cluster[NC];
       __shared__ int len_cluster;
       __shared__ int x1,x2;
-      __shared__ int updated_0;
-      __shared__ int64_t updater;
+      __shared__ int updated_0[NC];
+      __shared__ int64_t updater[NC];
       //__shared__ double similarity_array[20];
       //__shared__ double sorted[20];
       //__shared__ double* sorted_ptr;
       extern __shared__ int index[]; //dynamic size array using extern(==fanout)
-      __shared__ int cluster_modified[20];
+      __shared__ int cluster_modified[NC];
 
       if(tid==0)
       {
         len_cluster=0;
-        updater=0;
-        updated_0=0;
+        //updater=0;
+        //updated_0=0;
         //k=0;
         //m=0;
         //printf("Inside kernel\n");
@@ -484,9 +484,11 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         //for(int i=0;i<2708;i++)
         //printf("%ld \t",clusters_id[i]);
       }
-      if(tid<20)
+      if(tid<NC)
       { 
         cluster[tid]=-2;
+        updater[tid]=0;
+        updated_0[tid]=0;
         //similarity_array[tid]=-2.0;
         //sorted[tid]=-2.0;
       }
@@ -498,6 +500,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         //int length = sizeof(cluster_id) / sizeof(cluster_id[0]);
         int64_t nid = in_index[in_row_start+tid];
         int cluster_id1 = cluster_id[nid];
+        //printf("%d\n",cluster_id1);
         if(cluster_id1!=-1)
         {
           if(nodes_info[nid] == 1)
@@ -507,11 +510,12 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
               cluster[cluster_id1] = nid;
               //printf("By 1\n");
             } 
-            else if(updated_0 == 1)
+            else if(updated_0[cluster_id1] == 1)
             {		  
               cluster[cluster_id1] = nid;
-              nodes_info[updater] = 0;
-              updated_0 == 0;
+              nodes_info[updater[cluster_id1]] = 0;
+              updated_0[cluster_id1] = 0;
+              updater[cluster_id1] = 0;
               //printf("By 1\n");  
             } 
           }
@@ -519,8 +523,8 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
           {
             cluster[cluster_id1] = nid;
             nodes_info[nid] = 1;
-            updated_0 = 1;
-            updater = nid;
+            updated_0[cluster_id1] = 1;
+            updater[cluster_id1] = nid;
             //printf("By 0\n");
           }
         } 
@@ -533,7 +537,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
       //printf("Nodeinfo array updated\n");
       if(tid==0)
       {
-        for(int i=0;i<20;i++)
+        for(int i=0;i<NC;i++)
         {
           if(cluster[i]!=-2){
             //atomicAdd(&len_cluster, 1);
@@ -570,7 +574,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
         if(tid==0)
           {
             int k=0;
-            for(int i=0;i<20;i++)
+            for(int i=0;i<NC;i++)
             {
               if(cluster[i]!=-2)
                 cluster_modified[k++] = cluster[i];
@@ -623,8 +627,8 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
             // {
             // index[tid]=cluster_modified[tid];
             // } 
-           __shared__ double similarity_array[20];
-           __shared__ double sorted[20];
+           __shared__ double similarity_array[NC];
+           __shared__ double sorted[NC];
            __shared__ float epsilon; 
           if(tid == 0)
           {
@@ -642,7 +646,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
       __syncthreads();
 
 
-            if(tid<20)
+            if(tid<NC)
           {
               if(cluster[tid]!=-2)
             {
@@ -672,7 +676,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
           if(tid==0)
           {
             int p=0;
-            for(int s=0;s<20;s++)
+            for(int s=0;s<NC;s++)
             {
               if(similarity_array[s]!=-2.0)
                 sorted[p++] = similarity_array[s];
@@ -712,7 +716,7 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
             {
               //float epsilon = 0.000001;
               float x = sorted[tid];
-              for(int r=0; r<20; r++)
+              for(int r=0; r<NC; r++)
                 if(fabs(similarity_array[r] - x) < epsilon)
                   {
                   index[tid] = cluster[r];
@@ -885,10 +889,23 @@ COOMatrix _CSRRowWiseSamplingUniform(
   } else {  // without replacement
     const dim3 block(BLOCK_SIZE);
     const dim3 grid((num_rows + TILE_SIZE - 1) / TILE_SIZE);
+    cudaEvent_t start,stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
     CUDA_KERNEL_CALL(
       (_CSRRowWiseSampleUniformKernel<IdType, TILE_SIZE>), grid, block, 0,
       stream, random_seed, num_picks, num_rows, slice_rows, in_ptr, in_cols,
       data, out_ptr, out_rows, out_cols, out_idxs);
+    cudaDeviceSynchronize();
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    sampling_time += milliseconds/1000;
+    printf("cuda sampling time %.6f\n", sampling_time);
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
   }
   //				cudaDeviceSynchronize();
   // cudaEventRecord(stop);

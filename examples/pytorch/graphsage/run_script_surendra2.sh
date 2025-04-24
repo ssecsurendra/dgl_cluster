@@ -5,10 +5,10 @@ dataset=$1
 #fanout = $2
 #batch_size = $3
 epoch=$2
-batch_sizes=(1024 2048 4096 8192 16384 32768 65536 131072)
+batch_sizes=(1024 2048 4096 8192 16384 32768 65536)
 #batch_sizes=(2048)
 #fanouts=(30)
-fanouts=(10 15 20 30)
+fanouts=(10 15 20)
 for fanout in "${fanouts[@]}"; do
   # Loop through each batch size
   for batch_size in "${batch_sizes[@]}"; do

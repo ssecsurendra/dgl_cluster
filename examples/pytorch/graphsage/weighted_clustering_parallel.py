@@ -46,7 +46,7 @@ if __name__ == "__main__":
         "--dataset",
         type=str,
         default="cora",
-        #help="Dataset name ('cora', 'citeseer', 'pubmed', 'wisconsin','flickr', 'reddit', 'yelp', 'ogbn-products','ogbn-arxiv').",
+        #help="Dataset name ('cora', 'citeseer', 'pubmed', 'wisconsin','flickr', 'reddit', 'yelp', 'ogbn-products','ogbn-arxiv', 'papers').",
     )
     parser.add_argument(
         "--num_clusters",
@@ -83,6 +83,8 @@ if __name__ == "__main__":
         data = AsNodePredDataset(DglNodePropPredDataset("ogbn-products"))    
     elif args.dataset == "ogbn-arxiv":    
         data = AsNodePredDataset(DglNodePropPredDataset("ogbn-arxiv"))
+    elif args.dataset == "ogbn-papers":    
+        data = AsNodePredDataset(DglNodePropPredDataset("ogbn-papers100M"))
     elif args.dataset == "amazon_products":
         load_path = '/data/Dataset/gnn_dataset/amazon_products.dgl'
         data, _ = dgl.load_graphs(load_path)
@@ -407,14 +409,16 @@ if __name__ == "__main__":
     #     print("representative of {} is".format(j))
     #     print(row)
     #     print("Length of representative",len(row))
-    file_path2 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_60/reddit/representative.npy'
+    # file_path2 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_20/papers/representative.npy'
+    file_path2 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + str(args.num_clusters) +'/' + args.dataset + '_representative.npy'
     # Convert the list to a NumPy array
     np_representative = np.array(representative)
 
     # Save the NumPy array to a .npy file
     np.save(file_path2, np_representative)
     node_parts_weight = node_parts_weight.tolist()
-    file_path1 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_60/reddit/cluster_id.txt'
+    # file_path1 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_20/papers/cluster_id.txt'
+    file_path1 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + str(args.num_clusters) + '/' + args.dataset + '_cluster_id.txt'
     with open(file_path1, "w") as file:
         for value in node_parts_weight:
             file.write(f"{value}\n")

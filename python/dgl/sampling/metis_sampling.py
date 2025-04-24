@@ -8,8 +8,10 @@ import torch.nn.functional as F
 os.environ["DGLBACKEND"] = "pytorch"
 _computed_array = None
 _representative_array = None
+_method_array = None
+_method_value = 0
 
-def metis_partition(G):
+def metis_partition(G, dataset_name=None, fan=None):
     global _computed_array
     if _computed_array is None:
         # Perform computation here
@@ -31,7 +33,8 @@ def metis_partition(G):
         # _computed_array = torch.from_numpy(_computed_array)
         # _computed_array = _computed_array.to(device)
         columns = ['Data']
-        file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/cluster_id.txt',names=columns)
+        #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/cluster_id.txt',names=columns)
+        file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
         #print("This might a take while..")
         #print(file.head())
         Data=file['Data']
@@ -62,7 +65,16 @@ def metis_partition(G):
         #print("compute array",_computed_array)
     return _computed_array
 
-def get_representative_array(G):
+def get_method(method=None):
+    global _method_array
+    global _method_value
+    #print("method: ",method)
+    if _method_array is None:
+       _method_value = method
+       _method_array = 1
+    return _method_value
+
+def get_representative_array(G, dataset_name=None, fan=None):
     global _representative_array
     if _representative_array is None:
         # Perform computation here
@@ -91,7 +103,8 @@ def get_representative_array(G):
         #Data=file['Data']
         #Data=np.array(Data)
         #print(Data.shape)
-        loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/representative.npy')
+        loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_representative.npy')
+        #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/representative.npy')
         #print(loaded_array.shape)
         #print(loaded_array)
         #core.35410print("representataive array type",loaded_array.dtype)
@@ -288,8 +301,8 @@ def cluster_formation(g):
     print(dgl_cluster_id)
     return dgl_cluster_id
     
-def get_part_array(G):
+def get_part_array(G, dataset_name=None, fan=None):
     # print("array passed")
-    return metis_partition(G)
+    return metis_partition(G, dataset_name, fan)
     #return cluster_formation(G)
 

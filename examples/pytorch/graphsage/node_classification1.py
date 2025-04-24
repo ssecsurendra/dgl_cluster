@@ -124,11 +124,13 @@ def train(args, device, g,
     train_mask=g.ndata['train_mask']
     val_mask=g.ndata['val_mask']
     train_idx = torch.nonzero(train_mask).squeeze().to(device)
+    #print("train :",len(train_idx))
     val_idx = torch.nonzero(val_mask).squeeze().to(device)
+    #print("val: ",len(val_idx))
     sampler_time = time.time()
 
     sampler = NeighborSampler(
-        [int(fanout) for fanout in args.fan_out.split(",")],  # fanout for [layer-0, layer-1, layer-2]
+        [int(fanout) for fanout in args.fanout.split(",")],  # fanout for [layer-0, layer-1, layer-2]
         prefetch_node_feats=["feat"],
         prefetch_labels=["label"],
     )
@@ -266,9 +268,10 @@ def train(args, device, g,
         #print("Epoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {:.4f} | Loop_Time : {:.4f} | Model_Time : {:.4f} | x_y_time : {:.4f} | pred_time : {:.4f} | backward_time : {:.4f} | optim_time : {:.4f} ".format(epoch, total_loss / (it + 1), acc.item(), execution_time, iteration_time1, model_time1, x_y_time, pred_time, backward_time, optim_time ))
 
         epoch_lines.append(epoch_line)
-    tt_str = "total for loop time, total model time, total_training_time"
-    tt_time = "{:.4f}, {:.4f}, {:.4f}".format(total_for_loop_time, total_model_time, total_training_time)
-    epoch_lines.append(tt_str)
+    #tt_str = "total for loop time, total model time, total_training_time"
+    #tt_time = "{:.4f}, {:.4f}, {:.4f}".format(total_for_loop_time, total_model_time, total_training_time)
+    tt_time = "Sampling time: {:.4f}, Model training time: {:.4f}, Total time {:.4f}".format(total_for_loop_time, total_model_time, total_training_time)
+    #epoch_lines.append(tt_str)
     epoch_lines.append(tt_time)     
     #tt_time = "Total Training time {:.4f}".format( total_training_time)
     #epoch_lines.append(tt_time)
@@ -280,11 +283,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        default="mixed",
+        default="puregpu",
         choices=["cpu", "mixed", "puregpu"],
         help="Training mode. 'cpu' for CPU training, 'mixed' for CPU-GPU mixed training, "
         "'puregpu' for pure-GPU training.",
     )
+    parser.add_argument(
+        "--method",
+        default="cling",
+        choices=["graphsage", "cling"],
+        help="graphsagse vs cling",
+        )
     parser.add_argument(
         "--dt",
         type=str,
@@ -297,7 +306,9 @@ if __name__ == "__main__":
         default="ogbn-arxiv",
         #help="Dataset name ('cora', 'flickr', 'reddit', 'yelp', 'ogbn-products','ogbn-arxiv').",
     )
-    parser.add_argument("--fan_out", type=str, default="10,10,10")
+    parser.add_argument("--fanout", type=str, default="10,10,10")
+    parser.add_argument("--num_clusters", type=str, default="20")
+    #parser.add_argument("--fan_out", type=str, default="10,10,10,10,10")
     #parser.add_argument("--fan_out", type=str, default="25,10")
 
     #parser.add_argument("--fan_out", type=str, default="15,15,15")
@@ -378,10 +389,24 @@ if __name__ == "__main__":
     if not torch.cuda.is_available():
         args.mode = "cpu"
     #print(f"Training in {args.mode} mode.")
-    part_array = get_part_array(g)
-    node_array = get_representative_array(g)
+    #[str(fanout) for fanout in args.fan_out.split(",")],  # fanout for [layer-0, layer-1, layer-2]
+    #print(args.num_clusters)
+    #fanout = args.fan_out.split(",")[0]
+    #print(fanout)
+    #print(type(fanout))
+    if args.method == "graphsage":
+        method = 0
+    elif args.method == "cling":
+        method = 1
+    else:
+        print("please provide proper method, 0 for graphsage 1 for cling")
+
+    part_array = get_part_array(g, args.dataset, args.num_clusters)
+    node_array = get_representative_array(g, args.dataset, args.num_clusters)
+    method = get_method(method)
     test_mask=g.ndata['test_mask']
     test_idx = torch.nonzero(test_mask).squeeze()
+    #print("test: ",len(test_idx))
     g = g.to("cuda" if args.mode == "puregpu" else "cpu")
     #columns = ['Data']
     #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/cluster_id.txt',names=columns)

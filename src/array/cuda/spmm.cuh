@@ -245,6 +245,7 @@ void CusparseCsrmm2(
   //printf("\n CusparseCsrmm2 line 214");
   // device
   //printf("m=%d,n=%d,k=%d,nnz=%d\n",m,n,k,nnz);
+  //printf("csr num_rows %d, num_x_lenght %d, nnz %d, num_cols %d\n", m, n, nnz,k);
   auto device = runtime::DeviceAPI::Get(ctx);
   auto* thr_entry = runtime::CUDAThreadEntry::ThreadLocal();
   cudaStream_t stream = runtime::getCurrentCUDAStream();
