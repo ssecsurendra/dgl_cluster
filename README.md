@@ -1,6 +1,6 @@
 ---
 
-# DGL Cluster
+# CLING
 This project is a modified fork of the official [DGL (Deep Graph Library)](https://github.com/dmlc/dgl). We have created a new branch in our fork and integrated our custom code for experiments and performance analysis, particularly targeted at SC 2025 paper artifact regeneration.
 Please follow the DGL installation process if you get any Error.
 
@@ -27,7 +27,7 @@ We conducted our experiments on a machine with the following specifications:
 To quickly set up the exact same environment used in our experiments:
 
 ```bash
-conda env create -f environment.yml
+conda env create -f cling.yml
 conda activate dgl-gpu
 ```
 
