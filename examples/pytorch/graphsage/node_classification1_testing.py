@@ -180,9 +180,6 @@ def train(args, device, g,
     total_for_loop_time = 0.0
     total_model_time = 0.0
     epoch_lines = []
-    total_src_nodes_layer_3=0
-    total_src_nodes_layer_2=0
-    total_src_nodes_layer_1=0
 
     for epoch in range(args.epoch):
         model.train()
@@ -209,13 +206,14 @@ def train(args, device, g,
             start_x_y_time = time.time()
             x = blocks[0].srcdata["feat"]
             y = blocks[-1].dstdata["label"]
-            #print("1st layer:",blocks[0])
-            #print("2nd layer:",blocks[1])
-            #print("3rd layer:",blocks[-1])
-            if epoch == 0:
-                total_src_nodes_layer_3 = total_src_nodes_layer_3 + blocks[0].num_src_nodes()
-                total_src_nodes_layer_2 = total_src_nodes_layer_2 + blocks[1].num_src_nodes()
-                total_src_nodes_layer_1 = total_src_nodes_layer_1 + blocks[-1].num_src_nodes()
+            print("3rd layer:",len(blocks[0].srcdata[dgl.NID]))
+            print("2nd layer:",len(blocks[1].srcdata[dgl.NID]))
+            print("1st layer:",len(blocks[-1].srcdata[dgl.NID]))
+            
+            print("3rd layer:",blocks[0])
+            print("2nd layer:",blocks[1])
+            print("1st layer:",blocks[-1])
+            
             end_x_y_time = time.time()
 
             start_pred_time = time.time()
@@ -264,9 +262,6 @@ def train(args, device, g,
         total_training_time += execution_time
         total_for_loop_time += iteration_time1
         total_model_time += model_time1
-        if epoch == 0:
-            layer_line = "Layer_1 {:d} | Layer_2 {:d} | Layer_3 {:d}" .format(int(total_src_nodes_layer_1/it), int(total_src_nodes_layer_2/it), int(total_src_nodes_layer_3/it))
-            epoch_lines.append(layer_line)
         acc = evaluate(model, g, val_dataloader, num_classes)
         #print(
          #   "\nEpoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {}\n".format(

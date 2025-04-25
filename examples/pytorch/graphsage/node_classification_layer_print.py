@@ -182,7 +182,11 @@ def train(args, device, g,
     epoch_lines = []
 
     # Open the file once before the loop
-    log_file = open("layer_data.txt", "w")  # or "a" to append instead of overwrite
+    #log_file = open("layer_data.txt", "w")  # or "a" to append instead of overwrite
+    total_src_nodes_layer_3=0
+    total_src_nodes_layer_2=0
+    total_src_nodes_layer_1=0
+
     for epoch in range(args.epoch):
         model.train()
         total_loss = 0
@@ -208,17 +212,22 @@ def train(args, device, g,
             start_x_y_time = time.time()
             x = blocks[0].srcdata["feat"]
             y = blocks[-1].dstdata["label"]
+            #print("1st layer num_dst_nodes:", blocks[0].num_dst_nodes())
+            if epoch == 0:
+                total_src_nodes_layer_3 = total_src_nodes_layer_3 + blocks[0].num_src_nodes()
+                total_src_nodes_layer_2 = total_src_nodes_layer_2 + blocks[1].num_src_nodes()
+                total_src_nodes_layer_1 = total_src_nodes_layer_1 + blocks[-1].num_src_nodes()
             #print("1st layer:",blocks[0])
             #print("2nd layer:",blocks[1])
             #print("3rd layer:",blocks[-1])
             #log_file.write(f"Batch {batch_id}\n")
-            log_file.write(f"Batch \n")
-            log_file.write("1st layer:\n")
-            log_file.write(str(blocks[0]) + "\n\n")
-            log_file.write("2nd layer:\n")
-            log_file.write(str(blocks[1]) + "\n\n")
-            log_file.write("3rd layer:\n")
-            log_file.write(str(blocks[-1]) + "\n\n")
+            #log_file.write(f"Batch \n")
+            #log_file.write("1st layer:\n")
+            #log_file.write(str(blocks[0]) + "\n\n")
+            #log_file.write("2nd layer:\n")
+            #log_file.write(str(blocks[1]) + "\n\n")
+            #log_file.write("3rd layer:\n")
+            #log_file.write(str(blocks[-1]) + "\n\n")
 
             end_x_y_time = time.time()
 
@@ -268,6 +277,10 @@ def train(args, device, g,
         total_training_time += execution_time
         total_for_loop_time += iteration_time1
         total_model_time += model_time1
+        if epoch == 0:
+            layer_line = "Layer_1 {:d} | Layer_2 {:d} | Layer_3 {:d}" .format(int(total_src_nodes_layer_1/it), int(total_src_nodes_layer_2/it), int(total_src_nodes_layer_3/it))
+            epoch_lines.append(layer_line)
+
         acc = evaluate(model, g, val_dataloader, num_classes)
         #print(
          #   "\nEpoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {}\n".format(
@@ -283,7 +296,12 @@ def train(args, device, g,
     tt_time = "{:.4f}, {:.4f}, {:.4f}".format(total_for_loop_time, total_model_time, total_training_time)
     epoch_lines.append(tt_str)
     epoch_lines.append(tt_time)     
-    log_file.close()
+    #layer_line = "Layer_1 {:d} | Layer_2 {:d} | Layer_3 {:d}" .format(total_src_nodes_layer_1, total_src_nodes_layer_2, total_src_nodes_layer_3)
+    #epoch_lines.append(layer_line)
+    #epoch_lines.append(total_dst_nodes_layer_1)
+    #epoch_lines.append(total_dst_nodes_layer_2)
+    #epoch_lines.append(total_dst_nodes_layer_3)
+    #log_file.close()
     #tt_time = "Total Training time {:.4f}".format( total_training_time)
     #epoch_lines.append(tt_time)
     return epoch_lines
