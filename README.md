@@ -107,35 +107,39 @@ python setup.py build_ext --inplace
 ---
 
 ## 🧪 Regenerate SC 2025 Artifact
-
-### Step 1: Run GraphSAGE and Cling Scripts
-
-```bash
-cd $DGL_HOME
-bash generate_logs.sh
-```
-
-This will run both GraphSAGE and Cling across various configurations (datasets, batch sizes, fanouts) and store logs in:
-
-```
-cd logs
-cd graphsage or cling
-cd <dataset_name>
-```
-
-> ⏳ Note: This process may take 10–12 hours.
-
-### Step 2: Clean Previously Generated Files
+### Clean Previously Generated Files
 
 ```bash
 bash clean.sh
 ```
 
 ---
+### Run GraphSAGE and Cling Scripts
+
+```bash
+cd $DGL_HOME
+bash generate_logs.sh
+bash generate_logs_gcn.sh
+bash generate_logs_layer.sh
+```
+
+This will run both GraphSAGE and Cling across various configurations (datasets, batch sizes, fanouts) and store logs in:
+
+```
+logs -> graphsage or cling -> <dataset_name.txt>
+```
+
+> ⏳ Note: This process may take 10–12 hours.
 
 ## 📊 Reproducing Table and Figures from the Paper
 
-### Step 3: Generate Table 4
+### Generate Table 3
+> **Reduction of number of neighbors in each layers on different dataset (Batch size 1024, Fanout 20)**
+```bash
+bash table_3.sh
+```
+
+### Generate Table 4
 
 > **Performance breakdown with fanout 20 and batch size 1024 (in seconds)**
 
@@ -143,7 +147,7 @@ bash clean.sh
 bash table_4.sh
 ```
 
-### Step 4: Generate Figure 7 – Effect of Varying Fanout
+### Generate Figure 7 – Effect of Varying Fanout
 
 ```bash
 bash gen_Fig_7.sh <dataset_name>
@@ -155,7 +159,7 @@ Example:
 bash gen_Fig_7.sh reddit
 ```
 
-### Step 5: Generate Figure 8 – Effect of Varying Batch Size
+### Generate Figure 8 – Effect of Varying Batch Size
 
 ```bash
 bash gen_Fig_8.sh <dataset_name> <fanout_value>
@@ -167,7 +171,7 @@ Example:
 bash gen_Fig_8.sh ogbn-products 15
 ```
 
-### Step 6: Generate Figure 9 – Effect of Varying Number of Layers
+### Generate Figure 9 – Effect of Varying Number of Layers
 
 ```bash
 bash gen_Fig_9.sh <dataset_name>
@@ -179,7 +183,7 @@ Example:
 bash gen_Fig_9.sh ogbn-products
 ```
 
-### Step 7: Generate Figure 10 – Comparison with GCN Aggregation
+### Generate Figure 10 – Comparison with GCN Aggregation
 
 ```bash
 bash gen_Fig_10.sh <fanout_value>
