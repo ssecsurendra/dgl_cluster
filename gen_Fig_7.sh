@@ -10,8 +10,11 @@ echo -e "# Fanout\tGraphSAGE\tOur approach" > "$OUTPUT_FILE"
 #fanouts=(10 15 20)
 
 for fanout in "${fanouts[@]}"; do
-    gs_file="logs/graphsage/ogbn-products_F${fanout}_B1024_E100.txt"
-    cling_file="logs/cling/ogbn-products_F${fanout}_B1024_E100.txt"
+    #gs_file="logs/graphsage/ogbn-products_F${fanout}_B1024_E100.txt"
+    #cling_file="logs/cling/ogbn-products_F${fanout}_B1024_E100.txt"
+    gs_file="logs/graphsage/${dataset}_F${fanout}_B8192_E100.txt"
+    cling_file="logs/cling/${dataset}_F${fanout}_B8192_E100.txt"
+
     #summary_line=$(grep "Sampling time:" "$")
     # Extract total time
     gs_time=$(grep "Sampling time" "$gs_file" | awk '{print $10}' | xargs)

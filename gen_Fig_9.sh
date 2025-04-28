@@ -14,8 +14,11 @@ echo -e "#Layers\tGraphSAGE\tCLING" > "$OUTPUT_FILE"
 for layer_dir in "$base_path"/*-layer; do
     layer_name=$(basename "$layer_dir")
 
-    gs_file="$layer_dir/graphsage/ogbn-products_F20_B1024_E100.txt"
-    cling_file="$layer_dir/cling/ogbn-products_F20_B1024_E100.txt"
+    #gs_file="$layer_dir/graphsage/ogbn-products_F20_B1024_E100.txt"
+    #cling_file="$layer_dir/cling/ogbn-products_F20_B1024_E100.txt"
+    gs_file="$layer_dir/graphsage/${dataset}_F20_B1024_E100.txt"
+    cling_file="$layer_dir/cling/${dataset}_F20_B1024_E100.txt"
+
 
     if [[ -f "$gs_file" && -f "$cling_file" ]]; then
         gs_time=$(grep "Total time" "$gs_file" | awk '{print $10}' | xargs)
