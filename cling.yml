@@ -1,4 +1,4 @@
-name: dgl_cluster
+name: cling
 channels:
   - defaults
 dependencies:
@@ -272,6 +272,3 @@ dependencies:
       - webencodings==0.5.1
       - websocket-client==1.8.0
       - zipp==3.19.2
-variables:
-  DGL_HOME: /data/surendra/workspace/dgl_cluster
-prefix: /data/surendra/workspace/anaconda3/envs/dgl_cluster

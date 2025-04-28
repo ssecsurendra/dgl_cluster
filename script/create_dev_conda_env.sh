@@ -132,7 +132,7 @@ if [[ -n ${cuda_version} ]]; then
 
   torchversion=${torch_version}"+cu"${cuda_version//[-._]/}
   if [[ -z "${name}" ]]; then
-    name="dgl_cluster"
+    name="cling"
   fi
 fi
 
