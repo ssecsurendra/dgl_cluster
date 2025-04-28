@@ -51,7 +51,7 @@ python setup.py build_ext --inplace
 Download the source files from GitHub:
 
 ```bash
-git clone --recurse-submodules https://github.com/ssecsurendra/dgl_cluster.git
+git clone --recurse-submodules https://github.com/ssecsurendra/CLING.git
 cd dgl_cluster
 git submodule update --init --recursive
 ```
