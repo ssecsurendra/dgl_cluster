@@ -724,6 +724,7 @@ def _sample_neighbors(
             # part_array = get_part_array(g)
             part_array = get_part_array(g)
             node_array = get_representative_array(g)
+            #centrality_array = get_centrality_array(g)
             seed_features = g.ndata['feat']
             #print(seed_features)
             # Convert the PyTorch tensor to a NumPy array
@@ -738,6 +739,7 @@ def _sample_neighbors(
                     fanout_array,
                     part_array,
                     node_array,
+                    #centrality_array,
                     seed_features1,    
                     edge_dir,
                     prob_arrays,

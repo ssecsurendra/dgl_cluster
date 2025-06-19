@@ -45,13 +45,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        default="ogbn-arxiv",
+        default="cora",
         #help="Dataset name ('cora', 'citeseer', 'pubmed', 'wisconsin','flickr', 'reddit', 'yelp', 'ogbn-products','ogbn-arxiv', 'papers').",
     )
     parser.add_argument(
         "--num_clusters",
         type=int,
-        default=20,
+        default=10,
         help="Number of cluster",
     )
 
@@ -94,21 +94,23 @@ if __name__ == "__main__":
     else:
         raise ValueError("Unknown dataset: {}".format(args.dataset))
     G = data[0]
-    node_feature = G.ndata["feat"]
+    features_tensor = G.ndata["feat"]
+    # Convert to CuPy
+    features = cp.asarray(features_tensor)  # Works directly
     node_label = G.ndata["label"]
-    node_feature = node_feature.to('cuda')
+    #node_feature = node_feature.to('cuda')
     #print("node features:",node_feature)
     #print("node labels:",node_label)
-    f=G.ndata["feat"].shape[1]
-    print("f={}".format(f))
-    #finding nodes with feature vectors of all zeros.
-    zeros_tensor=torch.zeros(f, device='cuda')
-
-    equality_mask = torch.all(node_feature == zeros_tensor, dim=1)
-
-    # Find the index where all elements are zero
-    index = torch.nonzero(equality_mask, as_tuple=True)[0]
-    print("Number of feature vector of zeros is {}".format(len(index)))
+    # f=G.ndata["feat"].shape[1]
+    # print("f={}".format(f))
+    # #finding nodes with feature vectors of all zeros.
+    # zeros_tensor=torch.zeros(f, device='cuda')
+    #
+    # equality_mask = torch.all(features == zeros_tensor, dim=1)
+    #
+    # # Find the index where all elements are zero
+    # index = torch.nonzero(equality_mask, as_tuple=True)[0]
+    # print("Number of feature vector of zeros is {}".format(len(index)))
     size = G.num_edges()
     vertices = G.num_nodes()
     print(f"Number of nodes and edges are {vertices},{size}")
@@ -126,139 +128,90 @@ if __name__ == "__main__":
 
     Nodes = G.num_nodes()
     Edges = G.num_edges()
-    row_ptr=np.array(G.adj_tensors('csr')[0])
-    col_idx=np.array(G.adj_tensors('csr')[1])
-    row_ptr_s=len(row_ptr)
-    col_idx_s=len(col_idx)
-    print(row_ptr_s)
-    print(col_idx_s)
+    indptr=cp.asarray(G.adj_tensors('csr')[0])
+    indices=cp.asarray(G.adj_tensors('csr')[1])
+    # row_ptr_s=len(row_ptr)
+    # col_idx_s=len(col_idx)
+    # print(row_ptr_s)
+    # print(col_idx_s)
     end = time.time()
     totalTime = totalTime + (end-start)
     print("Graph Construction Successfull!!!! \tTime Taken :",round((end-start),4), "Seconds")
-    #-------------------------------------------Graph Construction is done ----------#
-    #---------------cosion similarity--------------------------
-    # Extract edges from CSR representation
-    #edges = []
-    # Convert NumPy array to PyTorch tensor
-    row_ptr = torch.tensor(row_ptr)
-    col_idx = torch.tensor(col_idx)
+    num_nodes = features.shape[0]
+    feature_dim = features.shape[1]
 
+    # Output edge weights
+    edge_weights = cp.zeros(indices.shape, dtype=cp.float32)
 
-    # Move the tensor to GPU
-    row_ptr = row_ptr.to('cuda')
-    col_idx = col_idx.to('cuda')
-    # calculating cosine_similarities
-    print("row_ptr size:",len(row_ptr))
-    print("col_idx size:",len(col_idx))
-    
-    #cosine_similarities = torch.Tensor([])
-    cosine_similarities = torch.empty(size, device='cuda')
-    jaccard_similarity = torch.empty(size, device='cuda')
- 
-    # for i in range(len(row_ptri) - 1):
-    #     start = row_ptr[i].item()
-    #     end = row_ptr[i + 1].item()
-    #     for j in range(start, end):
-    #         src = i
-    #         dst = col_idx[j].item()
-    #         edges.append((src, dst))
+    # CUDA kernel
+    kernel_code = r'''
+    extern "C" __global__
+    void edge_weights_kernel(
+        const float* __restrict__ features,
+        const int* __restrict__ indptr,
+        const int* __restrict__ indices,
+        float* edge_weights,
+        int num_nodes,
+        int feature_dim
+    ) {
+        int src = blockIdx.x;
+        int edge_start = indptr[src];
+        int edge_end = indptr[src + 1];
+
+        for (int e = edge_start + threadIdx.x; e < edge_end; e += blockDim.x) {
+            int dst = indices[e];
+
+            // Cosine similarity
+            float dot = 0.0, norm_a = 0.0, norm_b = 0.0;
+            for (int i = 0; i < feature_dim; ++i) {
+                float a = features[src * feature_dim + i];
+                float b = features[dst * feature_dim + i];
+                dot += a * b;
+                norm_a += a * a;
+                norm_b += b * b;
+            }
+            float cosine = (norm_a > 0 && norm_b > 0) ? dot / (sqrtf(norm_a) * sqrtf(norm_b)) : 0.0;
+
+            // Jaccard similarity
+            int count_intersection = 0;
+            int count_union = 0;
+            int i = indptr[src], j = indptr[dst];
+
+            while (i < indptr[src + 1] && j < indptr[dst + 1]) {
+                int a = indices[i];
+                int b = indices[j];
+                if (a == b) {
+                    count_intersection++;
+                    count_union++;
+                    i++; j++;
+                } else if (a < b) {
+                    count_union++;
+                    i++;
+                } else {
+                    count_union++;
+                    j++;
+                }
+            }
+            count_union += (indptr[src + 1] - i) + (indptr[dst + 1] - j);
+
+            float jaccard = count_union > 0 ? (float)count_intersection / count_union : 0.0;
+
+            edge_weights[e] = (cosine + jaccard)*50;
+        }
+    }
+    '''
+
+    kernel = cp.RawKernel(kernel_code, 'edge_weights_kernel')
+    threads_per_block = 128
+    blocks = num_nodes
     start_time = time.time()
-    #weights=torch.empty(size, device='cuda')
-    for i in tqdm(range(len(row_ptr) - 1), desc="processing nodes"):
-        start = row_ptr[i].item()
-        end = row_ptr[i + 1].item()
 
-        #x = col_idx[start:end]
-        #deg = row_ptr[i+1] - row_ptr[i]
-        #print("node {} deg {}".format(i,deg))
-        #y = node_feature[x]
-        #y = y.to('cuda')
-        #print("y",y)
-        z = node_feature[i]
-        #z = z.to('cuda')
-        #print("z",z)
-        # if i not in index:
-        #     cosine_similarities[start:end] = torch.tensor([F.cosine_similarity(z, tensor, dim=0) for tensor in y])
-        #     # Use a mask to set negative elements to zero
-        #     #cosine_similarities[start:end][cosine_similarities[start:end] < 0] = 0.0
-        # else:
-        #     cosine_similarities[start:end] = 0.0
-        # Neighbors of node i
-        src_neighbors = col_idx[start:end]
-        src_neighbors = src_neighbors.to(device="cuda")
-        #print("Neighbors of source node {} are {}".format(i,src_neighbors))
- 
-        # Iterate over each neighbor to compute the Jaccard similarity
-        for j in range(start, end):
-            dst_node = col_idx[j].item()
-            #print("destination",col_idx[j])
-            cosine_similarities[j] = torch.tensor([F.cosine_similarity(z,node_feature[dst_node], dim=0)])
-            #print("cosine similarity:",cosine_similarities[j])
-
-        
-            # Get the range of indices in the 'indices' array for the destination node
-            dst_start = row_ptr[dst_node].item()
-            dst_end = row_ptr[dst_node + 1].item()
-        
-            # Neighbors of the destination node
-            dst_neighbors = col_idx[dst_start:dst_end]
-            dst_neighbors = dst_neighbors.to(device="cuda")
-            #print("Neighbors of destination node {} are {}".format(dst_node,dst_neighbors))
-
-            # Efficiently find the intersection using broadcasting and logical operations
-            intersection = torch.isin(src_neighbors, dst_neighbors).sum().item()
-            union = len(src_neighbors) + len(dst_neighbors) - intersection
-            
-            # Calculate Jaccard similarity
-            if union > 0:
-                jaccard_similarity[j] = intersection / union
-                #print("jaccard", jaccard_similarity[j])
-                #jaccard_sim = intersection / union
-            else:
-                #jaccard_sim = 0.0
-                jaccard_similarity[j] = 0.0
-                #print("jaccard",jaccard_similarity)
-            #print("jaccard_sim: ",jaccard_sim)    
-            #jaccard_sim = torch.tensor(jaccard_sim, device="cuda")
-            # Convert the scalar to a 1D tensor
-            #jaccard_sim = jaccard_sim.unsqueeze(0)
-            #print("jaccard_sim of {} and {} is {}".format(i,j,jaccard_sim)) 
-            #jaccard_similarity = torch.cat((jaccard_similarity, jaccard_sim), dim=0)
-            del dst_neighbors
-            #del jaccard_sim
-            del dst_node
-            #print("j loop end {}".format(j)) print("cosine_similarities: ", cosine_similarities)
-    #print("Length of cosine_similarities: ",len(cosine_similarities))
-
-        del src_neighbors 
-
-        #similarities = torch.where(similarities < 0, torch.tensor(0.0), similarities)
-        #similarities = th.matmul(y,z)
-        #weights[row_ptr[i]:row_ptr[i+1]]=similarities
-        #similarities = similarities.to('cuda')
-        #print("Length of similarities",len(similarities))
-        #print("Similarities array corresponding to node{} is{}".format(i,similarities))
-        #cosine_similarities = torch.cat((cosine_similarities,similarities))
-        #del y
-        del z
-        #del x
-        #del deg
-    cosine_similarities = torch.clamp(cosine_similarities, min=0)
-    #print("cosine_similarities: ", cosine_similarities)
-    #print("Length of cosine_similarities: ",len(cosine_similarities))
-
-
-    #print("jaccard_similarity: ",jaccard_similarity)
-    #print("Length of jaccard_similarity",len(jaccard_similarity))
-    #print("Jaccard_time: ",Jaccard_time_end - Jaccard_time_start)
-    #weight_vector1 = cosine_similarities + jaccard_similarity
-    #torch.set_printoptions(threshold=torch.inf)
-    weight_vector1 = torch.add(cosine_similarities,jaccard_similarity)
-    #weight_vector1 = torch.add(weights,jaccard_similarity)
-    weight_vector = weight_vector1 * 50
-    weight_vector = torch.round(weight_vector)
-    weight_vector = weight_vector.to(torch.int64)
-    print("weight_vector",weight_vector)
+    kernel((blocks,), (threads_per_block,),
+           (features.ravel(), indptr, indices, edge_weights, num_nodes, feature_dim))
+    # weight_vector = weight_vector1 * 50
+    # weight_vector = torch.round(weight_vector)
+    # weight_vector = weight_vector.to(torch.int64)
+    print("weight_vector",edge_weights)
     #print("Length of weight_vector", len(weight_vector))
   
     #cosine_similarities = torch.where(cosine_similarities < 0, torch.tensor(0.0), cosine_similarities)
@@ -306,8 +259,8 @@ if __name__ == "__main__":
     #print("cosine_similarities: ",cosine_similarities)
     #print("size cosine_similarities: ", len(cosine_similarities))
     # Assign the edge weights to the 'weight' attribute of the graph
-    weight_vector = weight_vector.cpu()
-    G.edata['weight'] = weight_vector
+    #weight_vector = weight_vector.cpu()
+    G.edata['weight'] = edge_weights
     #xadj = row_ptr.tolist()  # The xadj array in PyMetis (cumulative degree list)
     #adjncy = col_idx.tolist()  # The adjacency list in PyMetis
     #adjwgt = weight_arr.tolist()# The edge weights in PyMetis
@@ -328,14 +281,6 @@ if __name__ == "__main__":
     print("Partition is Done !!!!!\t Time of Partition is :",round((end-start),4), "Seconds")
     mem_usage = (psutil.Process().memory_info().rss)/(1024 * 1024 * 1024)
     print(f"Current memory usage: { (mem_usage)} bytes")
-    print("Type of weight array:", type(weight_vector))
-
-    file_path3 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + str(args.num_clusters) + '/' + args.dataset + '_weight_vector.txt'
-    with open(file_path3, "w") as file:
-        for value in weight_vector:
-            file.write(f"{value}\n")
-
-
     #print("node_parts_weight: ",node_parts_weight)
     # print("cuts: ", cut)
     # print("membership: ", membership)
@@ -352,13 +297,13 @@ if __name__ == "__main__":
 
     #del g_row_ptr
     #del g_col_idx
-    del row_ptr
-    del col_idx
+    #del row_ptr
+    #del col_idx
     #del g_weight_arr
     #del g_sum
     #del weight_arr
-    del weight_vector
-    del weight_vector1
+    #del weight_vector
+    #del weight_vector1
     #del sum
     #cp.cuda.runtime.free(intptr_t temp_arr)
     cp._default_memory_pool.free_all_blocks()
@@ -397,10 +342,10 @@ if __name__ == "__main__":
     #representative = []
     representative = torch.empty(0, f)
     #representative = representative.to('cuda')
-    node_feature = node_feature.cpu()
+    #node_feature = node_feature.cpu()
     for j, row in enumerate(clusters):
         #print(j)
-        y=node_feature[row]
+        y=features[row]
         summ=torch.zeros(f)
         for p in y:
             summ+=p
@@ -418,7 +363,7 @@ if __name__ == "__main__":
     #     print(row)
     #     print("Length of representative",len(row))
     # file_path2 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_20/papers/representative.npy'
-    file_path2 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + str(args.num_clusters) +'/' + args.dataset + '_representative.npy'
+    file_path2 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_' + str(args.num_clusters) +'/' + args.dataset + '_representative.npy'
     # Convert the list to a NumPy array
     np_representative = np.array(representative)
 
@@ -426,7 +371,7 @@ if __name__ == "__main__":
     np.save(file_path2, np_representative)
     node_parts_weight = node_parts_weight.tolist()
     # file_path1 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_20/papers/cluster_id.txt'
-    file_path1 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + str(args.num_clusters) + '/' + args.dataset + '_cluster_id.txt'
+    file_path1 = '/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_' + str(args.num_clusters) + '/' + args.dataset + '_cluster_id.txt'
     with open(file_path1, "w") as file:
         for value in node_parts_weight:
             file.write(f"{value}\n")

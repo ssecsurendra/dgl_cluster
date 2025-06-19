@@ -10,6 +10,7 @@ _computed_array = None
 _representative_array = None
 _method_array = None
 _method_value = 0
+_centrality_array = None
 
 def metis_partition(G, dataset_name=None, fan=None):
     global _computed_array
@@ -34,7 +35,9 @@ def metis_partition(G, dataset_name=None, fan=None):
         # _computed_array = _computed_array.to(device)
         columns = ['Data']
         #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/cluster_id.txt',names=columns)
-        file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
+        #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
+        #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/aniket/cluster_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
+        file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
         #print("This might a take while..")
         #print(file.head())
         Data=file['Data']
@@ -103,7 +106,9 @@ def get_representative_array(G, dataset_name=None, fan=None):
         #Data=file['Data']
         #Data=np.array(Data)
         #print(Data.shape)
-        loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_representative.npy')
+        #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_representative.npy')
+        #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/aniket/cluster_' + fan + '/' + dataset_name + '_representative.npy')
+        loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_' + fan + '/' + dataset_name + '_representative.npy')
         #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/representative.npy')
         #print(loaded_array.shape)
         #print(loaded_array)
@@ -133,6 +138,63 @@ def get_representative_array(G, dataset_name=None, fan=None):
         #_computed_array = dgl.ndarray.array(numpy_array)
         #print("compute array",_computed_array)
     return _representative_array
+
+
+def get_centrality_array(G, dataset_name=None):
+    global _centrality_array
+    if _centrality_array is None:
+        # Perform computation here
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Choose device
+        #print(G)
+        #print(type(G))
+        #print("partition start")
+        
+        # dgl.distributed.partition_graph(G, 'test', 4, num_hops=1, part_method='metis', out_path='output/', balance_ntypes=G.ndata['train_mask'], balance_edges=True)
+        # ( g, node_feats, edge_feats, gpb, graph_name, ntypes_list, etypes_list,) = dgl.distributed.load_partition('output/test.json', 0)
+
+        # print(g)
+        #_computed_array = dgl.metis_partition_assignment(G, 4, balance_ntypes=None, balance_edges=False, mode='k-way', objtype='cut')
+        # context = dgl.cuda.get_context(0)
+        # context = dgl.cuda.context(0)
+        # _computed_array = np.random.rand(10)
+        # _computed_array = np.random.randint(10000, 90001, size=10)
+        # _computed_array = _computed_array.astype(np.int64)
+        # _computed_array = torch.from_numpy(_computed_array)
+        # _computed_array = _computed_array.to(device)
+        # following 4 lines read the content of .txt file converts into numpy array.
+        columns = ['Data']
+
+        #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_representative.npy')
+        file = pd.read_csv('/data/Framework/graphsage/POP_FINAL' + '/' + dataset_name + '_degree_centrality.txt', names=columns)
+        #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/representative.txt',names=columns)
+        #print(file.head())
+        #print("This might a take while..")
+        Data=file['Data']
+        Data=np.array(Data)
+
+        _centrality_array = dgl.ndarray.array(Data)
+        #print("compute array",_computed_array)
+        #print(Data.shape)
+        #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_representative.npy')
+        #loaded_array = np.load('/data/Framework/graphsage/POP_FINAL' + '/' + dataset_name + '_degree_centrality.txt', names=columns)
+        #_centrality_array = dgl.ndarray.array(loaded_array)
+        #print("compute array",_computed_array)
+
+        #_computed_array = cp.asarray(_computed_array)
+        # _computed_array = _computed_array.to(device)
+        # Convert NumPy array to DGL tensor
+        # _computed_array = dgl.tensor(_computed_array)
+        # device = "cuda" if dgl.cuda.is_available() else "cpu"
+        # _computed_array = _computed_array.to(device)
+        # _computed_array = _computed_array.tolist
+        #print("Array computation done and passed to neighbour.py line 631")
+    #else:
+        #numpy_array = _computed_array.asnumpy()
+        #numpy_array = numpy_array[:-1]
+        #numpy_array = np.append(numpy_array, 1)
+        #_computed_array = dgl.ndarray.array(numpy_array)
+        #print("compute array",_computed_array)
+    return _centrality_array
 
 def cluster_formation(g):
     node_feature=g.ndata["feat"]

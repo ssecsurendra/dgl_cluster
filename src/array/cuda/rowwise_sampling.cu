@@ -376,6 +376,16 @@ __device__ double similarity(double* row, double* representative, int n)
   }
 }
 
+// Lock function using atomicCAS
+//__device__ void lock(int* mutex) {
+//    while (atomicCAS(mutex, 0, 1) != 0); // Spin-wait until lock acquired
+//}
+
+// Unlock function using atomicExch
+//__device__ void unlock(int* mutex) {
+//    atomicExch(mutex, 0); // Release the lock
+//}
+
 //own kernel
 template <typename IdType, int TILE_SIZE>
 __global__ void _CSRRowWiseSampleUniformKernelSurendra(
@@ -511,11 +521,14 @@ __global__ void _CSRRowWiseSampleUniformKernelSurendra(
               //printf("By 1\n");
             } 
             else if(updated_0[cluster_id1] == 1)
-            {		  
+            {	
+              //lock(mutex);	  
               cluster[cluster_id1] = nid;
               nodes_info[updater[cluster_id1]] = 0;
               updated_0[cluster_id1] = 0;
               updater[cluster_id1] = 0;
+              //printf("Implementing lock\n");
+              //unlock(mutex);
               //printf("By 1\n");  
             } 
           }
@@ -903,7 +916,7 @@ COOMatrix _CSRRowWiseSamplingUniform(
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     sampling_time += milliseconds/1000;
-    printf("cuda sampling time %.6f\n", sampling_time);
+    //printf("cuda sampling time %.6f\n", sampling_time);
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
   }
@@ -1450,6 +1463,12 @@ COOMatrix _CSRRowWiseSamplingUniform3(
   int64_t col1 = shape1[1];
   //printf("rows and cols of seed_features are %lld %lld\n",row1,col1);
   n=col1;
+  //int h_mutex = 0;
+  //int* d_mutex;
+  //cudaMalloc(&d_mutex, sizeof(int));
+
+  // Initialize device memory
+  //cudaMemcpy(d_mutex, &h_mutex, sizeof(int), cudaMemcpyHostToDevice);
   //printf("Inside  _CSRRowWiseSamplingUniform3\n");
 
   cudaMalloc((void **)&nodes_info, size * sizeof(int64_t));
@@ -1713,7 +1732,7 @@ COOMatrix _CSRRowWiseSamplingUniform3(
     CUDA_KERNEL_CALL(
       (_CSRRowWiseSampleUniformKernelSurendra<IdType, TILE_SIZE>), grid, block, num_picks,
       stream, random_seed, num_picks, num_rows, slice_rows, in_ptr, in_cols,
-      data, out_ptr, out_rows, out_cols, out_idxs, d_part_array, d_node_array, nodes_info, d_seed_features,n);
+      data, out_ptr, out_rows, out_cols, out_idxs, d_part_array, d_node_array, nodes_info, d_seed_features, n);
 
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -1723,7 +1742,7 @@ COOMatrix _CSRRowWiseSamplingUniform3(
     //milliseconds = milliseconds/1000;
     //printf("cuda sampling time %.6f\n",milliseconds/1000);
 
-    printf("cuda sampling time %.6f\n", sampling_time);
+    //printf("cuda sampling time %.6f\n", sampling_time);
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
@@ -1844,6 +1863,16 @@ COOMatrix _CSRRowWiseSamplingUniform4(
    cudaDeviceSynchronize();
    counter=0;
   }
+  //int h_mutex = 0;
+  //int* d_mutex;
+  //cudaMalloc(&d_mutex, sizeof(int));
+
+  // Initialize device memory
+  //cudaMemcpy(d_mutex, &h_mutex, sizeof(int), cudaMemcpyHostToDevice);
+  //printf("Inside  _CSRRowWiseSamplingUniform3\n");
+
+  //cudaMalloc((void **)&nodes_info, size * sizeof(int64_t));
+  //cudaMemset(nodes_info, 0, size * sizeof(int64_t));
 
 
 
@@ -1950,7 +1979,7 @@ COOMatrix _CSRRowWiseSamplingUniform4(
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     sampling_time += milliseconds/1000;
-    printf("cuda sampling time %.6f\n", sampling_time);
+    //printf("cuda sampling time %.6f\n", sampling_time);
     //printf("cuda sampling time %.6f\n",milliseconds/1000);
 
     cudaEventDestroy(start);

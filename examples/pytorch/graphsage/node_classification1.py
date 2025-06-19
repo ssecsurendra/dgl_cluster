@@ -302,7 +302,7 @@ if __name__ == "__main__":
         "--method",
         default="cling",
         choices=["graphsage", "cling"],
-        help="graphsagse vs cling",
+        help="graphsage vs cling",
         )
     parser.add_argument(
         "--dt",
@@ -352,10 +352,26 @@ if __name__ == "__main__":
         dataset, _ = dgl.load_graphs(load_path)
     elif args.dataset == "cit-net":
         load_path = '/data/Dataset/gnn_dataset/citations_network_graph.dgl'
-        dataset, _ = dgl.load_graphs(load_path)    
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "igb-tiny":
+        load_path = './dataset/igb_tiny.dgl'
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "igb-medium":
+        load_path = './dataset/igb_medium.dgl'
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "wiki":
+        load_path = './dataset/wikidata5M/wikidata5m_dgl_graph.bin'
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "igb-small":
+        load_path = './dataset/igb_small.dgl'
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "amazon_products":
+        load_path = './dataset/amazon_products.dgl'
+        dataset, _ = dgl.load_graphs(load_path)       
     else:
         raise ValueError("Unknown dataset: {}".format(args.dataset))
     g = dataset[0]
+    #print(g.ndata["feat"])
     
     """
     #printing and ploting graph degree related information.
@@ -430,13 +446,16 @@ if __name__ == "__main__":
     #print(type(cluster_id))
     #print("Device of cluster_id ", cluster_id.device)
 
-    num_classes = dataset.num_classes
+    #num_classes = dataset.num_classes
+    labels = g.ndata["label"]
+    num_classes = int(labels.max().item()) + 1
     #num_classes = 107
     device = torch.device("cpu" if args.mode == "cpu" else "cuda")
 
     # create GraphSAGE model
     in_size = g.ndata["feat"].shape[1]
-    out_size = dataset.num_classes
+    #out_size = dataset.num_classes
+    out_size = int(labels.max().item()) + 1
     #out_size = 107
     model = SAGE(in_size, 256, out_size).to(device)
 

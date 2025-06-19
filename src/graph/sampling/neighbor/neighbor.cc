@@ -828,6 +828,140 @@ HeteroSubgraph SampleNeighbors3(
   return ret;
 }
 
+// HeteroSubgraph SampleNeighbors5(
+//     const HeteroGraphPtr hg, const std::vector<IdArray>& nodes,
+//     const std::vector<int64_t>& fanouts,
+//     const std::vector<int64_t>& parts_arr, 
+//     const std::vector<int64_t>& centrality_arr,
+//     NDArray nodes_arr_nd,
+//     NDArray seed_features,
+//     EdgeDir dir,
+//     const std::vector<NDArray>& prob_or_mask,
+//     const std::vector<IdArray>& exclude_edges, bool replace) {
+//   // sanity check
+//   gettimeofday(&begin, 0);
+//   CHECK_EQ(nodes.size(), hg->NumVertexTypes())
+//       << "Number of node ID tensors must match the number of node types.";
+//   CHECK_EQ(fanouts.size(), hg->NumEdgeTypes())
+//       << "Number of fanout values must match the number of edge types.";
+//   CHECK_EQ(prob_or_mask.size(), hg->NumEdgeTypes())
+//       << "Number of probability tensors must match the number of edge types.";
+//
+//   DGLContext ctx = aten::GetContextOf(nodes);
+//
+//   // printf("Vector data: ");
+//     // for (auto elem : parts_arr) {
+//         // printf("%ld ", elem);
+//     // }
+//     // printf("\n");
+//   // dgl::runtime::NDArray parts_array = CopyVectorToNDArray(parts_arr);
+//   std::vector<HeteroGraphPtr> subrels(hg->NumEdgeTypes());
+//   std::vector<IdArray> induced_edges(hg->NumEdgeTypes());
+//   for (dgl_type_t etype = 0; etype < hg->NumEdgeTypes(); ++etype) {
+//     auto pair = hg->meta_graph()->FindEdge(etype);
+//     const dgl_type_t src_vtype = pair.first;
+//     const dgl_type_t dst_vtype = pair.second;
+//     const IdArray nodes_ntype =
+//         nodes[(dir == EdgeDir::kOut) ? src_vtype : dst_vtype];
+//     const int64_t num_nodes = nodes_ntype->shape[0];
+//
+//     if (num_nodes == 0 || fanouts[etype] == 0) {
+//       // Nothing to sample for this etype, create a placeholder relation graph
+//       subrels[etype] = UnitGraph::Empty(
+//           hg->GetRelationGraph(etype)->NumVertexTypes(),
+//           hg->NumVertices(src_vtype), hg->NumVertices(dst_vtype),
+//           hg->DataType(), ctx);
+//       induced_edges[etype] = aten::NullArray(hg->DataType(), ctx);
+//     } else {
+//       COOMatrix sampled_coo;
+//       // Create a DGL NDArray from the vector
+//     // dgl::runtime::NDArray parts_array = dgl::runtime::NDArray::Empty(
+//     //     {static_cast<int64_t>(parts_arr.size())},    // Shape
+//     //     dgl::runtime::kDGLInt,                   // Data type (int64)
+//     //     dgl::runtime::DGLContext{ctx, 0}       // Device context (CPU)
+//     // );
+//     // //
+//     // Copy vector data into the NDArray
+//       //gettimeofday(&begin, 0);
+//       NDArray parts_arr_nd = NDArray::FromVector(parts_arr);
+//       NDArray centrality_arr_nd = NDArray::FromVector(centrality_arr);
+//
+//       //gettimeofday(&end, 0);
+//       //long seconds = end.tv_sec - begin.tv_sec;
+//       //long microseconds = end.tv_usec - begin.tv_usec;
+//       //double elapsed = seconds + microseconds*1e-6;
+//       //printf("Time for NDArray::FromVector: %.6f seconds.\n", elapsed);
+//
+//     // std::copy(parts_arr.begin(), parts_arr.end(), static_cast<int64_t*>(parts_array->data));
+//       // sample from one relation graph
+//       auto req_fmt = (dir == EdgeDir::kOut) ? CSR_CODE : CSC_CODE;
+//       auto avail_fmt = hg->SelectFormat(etype, req_fmt);
+//       switch (avail_fmt) {
+//         case SparseFormat::kCOO:
+//           if (dir == EdgeDir::kIn) {
+//             sampled_coo = aten::COOTranspose(aten::COORowWiseSampling(
+//                 aten::COOTranspose(hg->GetCOOMatrix(etype)), nodes_ntype,
+//                 fanouts[etype], prob_or_mask[etype], replace));
+//           } else {
+//             sampled_coo = aten::COORowWiseSampling(
+//                 hg->GetCOOMatrix(etype), nodes_ntype, fanouts[etype],
+//                 prob_or_mask[etype], replace);
+//           }
+//           break;
+//         case SparseFormat::kCSR:
+//           CHECK(dir == EdgeDir::kOut)
+//               << "Cannot sample out edges on CSC matrix.";
+//           sampled_coo = aten::CSRRowWiseSampling5(
+//               hg->GetCSRMatrix(etype), nodes_ntype, fanouts[etype],
+//               parts_arr_nd,
+//               centrality_arr_nd,
+// 	            nodes_arr_nd,
+//               seed_features,
+//               prob_or_mask[etype], replace);
+//           break;
+//         case SparseFormat::kCSC:
+//           CHECK(dir == EdgeDir::kIn) << "Cannot sample in edges on CSR matrix.";
+//           // int x;
+//           // scanf("%d", &x);
+//           sampled_coo = aten::CSRRowWiseSampling5(
+//               hg->GetCSCMatrix(etype), nodes_ntype, fanouts[etype],
+//               parts_arr_nd,
+//               centrality_arr_nd,
+// 	            nodes_arr_nd,
+//               seed_features,
+//               prob_or_mask[etype], replace);
+//           sampled_coo = aten::COOTranspose(sampled_coo);
+//           break;
+//         default:
+//           LOG(FATAL) << "Unsupported sparse format.";
+//       }
+//
+//       subrels[etype] = UnitGraph::CreateFromCOO(
+//           hg->GetRelationGraph(etype)->NumVertexTypes(), sampled_coo.num_rows,
+//           sampled_coo.num_cols, sampled_coo.row, sampled_coo.col);
+//       induced_edges[etype] = sampled_coo.data;
+//     }
+//   }
+//
+//   HeteroSubgraph ret;
+//   ret.graph =
+//       CreateHeteroGraph(hg->meta_graph(), subrels, hg->NumVerticesPerType());
+//   ret.induced_vertices.resize(hg->NumVertexTypes());
+//   ret.induced_edges = std::move(induced_edges);
+//   if (!exclude_edges.empty()) {
+//     return ExcludeCertainEdges(ret, exclude_edges).first;
+//   }
+//   gettimeofday(&end, 0);
+//   long seconds = end.tv_sec - begin.tv_sec;
+//   long microseconds = end.tv_usec - begin.tv_usec;
+//   double elapsed = seconds + microseconds*1e-6;
+//
+//   //printf("neighbor.cc sample_neighbors time %.6f seconds.\n", elapsed);
+//   return ret;
+// }
+//
+
+
 template <typename IdType>
 std::tuple<HeteroGraphPtr, std::vector<IdArray>, std::vector<IdArray>>
 SampleNeighborsFused(
@@ -1505,6 +1639,59 @@ DGL_REGISTER_GLOBAL("sampling.neighbor._CAPI_DGLSampleNeighbors3")
       *rv = HeteroSubgraphRef(subg);
     });
 
+// DGL_REGISTER_GLOBAL("sampling.neighbor._CAPI_DGLSampleNeighbors5")
+//     .set_body([](DGLArgs args, DGLRetValue* rv) {
+//       HeteroGraphRef hg = args[0];
+//       const auto& nodes = ListValueToVector<IdArray>(args[1]);
+//       IdArray fanouts_array = args[2];
+//       const auto& fanouts = fanouts_array.ToVector<int64_t>();
+//       IdArray parts = args[3];
+//       // const auto& parts_array = ListValueToVector<NDArray>(args[3]);
+//       //gettimeofday(&begin, 0);
+//       const auto& parts_array = parts.ToVector<int64_t>();
+//       IdArray centrality = args[4];
+//       // const auto& parts_array = ListValueToVector<NDArray>(args[3]);
+//       //gettimeofday(&begin, 0);
+//       const auto& centrality_array = centrality.ToVector<int64_t>();
+//
+//       //IdArray node = args[4];
+//       NDArray node = args[5];
+//       NDArray seed_features = args[6];
+//
+//       // const auto& parts_array = ListValueToVector<NDArray>(args[3]);
+//       //gettimeofday(&begin, 0);
+//       //const auto& nodes_array = node.ToVector<int64_t>();
+//
+//       //gettimeofday(&end, 0);
+//       //long seconds = end.tv_sec - begin.tv_sec;
+//       //long microseconds = end.tv_usec - begin.tv_usec;
+//       //double elapsed = seconds + microseconds*1e-6;
+//
+//       //printf("Time for parts.ToVector: %.6f seconds.\n", elapsed);
+//
+//       const std::string dir_str = args[7];
+//       const auto& prob_or_mask = ListValueToVector<NDArray>(args[8]);
+//       const auto& exclude_edges = ListValueToVector<IdArray>(args[9]);
+//       const bool replace = args[10];
+//
+//       CHECK(dir_str == "in" || dir_str == "out")
+//           << "Invalid edge direction. Must be \"in\" or \"out\".";
+//       EdgeDir dir = (dir_str == "in") ? EdgeDir::kIn : EdgeDir::kOut;
+//
+//       std::shared_ptr<HeteroSubgraph> subg(new HeteroSubgraph);
+//       //gettimeofday(&begin, 0);
+//       *subg = sampling::SampleNeighbors5(
+//           hg.sptr(), nodes, fanouts, parts_array, centrality_array, node, seed_features, dir, prob_or_mask, exclude_edges, replace);
+//       //gettimeofday(&end, 0);
+//     //long seconds = end.tv_sec - begin.tv_sec;
+//     //long microseconds = end.tv_usec - begin.tv_usec;
+//     //double elapsed = seconds + microseconds*1e-6;
+//
+//     //printf("Time for DGL_REGISTER_GLOBAL:SampleNeighbors: %.6f seconds.\n", elapsed);
+//
+//       *rv = HeteroSubgraphRef(subg);
+//     });
+//
 
 DGL_REGISTER_GLOBAL("sampling.neighbor._CAPI_DGLSampleNeighbors2")
     .set_body([](DGLArgs args, DGLRetValue* rv) {

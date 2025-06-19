@@ -1,0 +1,15 @@
+Training with DGL built-in GraphConv module.
+f=128
+Number of feature vector of zeros is 0
+Number of nodes and edges are 169343,1166243
+Current memory usage: 1.8297119140625 GB
+Data Loading Successful!!!! 	Time Taken of Loading is : 1.1291 Seconds
+Current memory usage: 1.8297119140625 GB
+169344
+1166243
+Graph Construction Successful!!!! 	Time Taken : 1.1648 Seconds
+row_ptr size: 169344
+col_idx size: 1166243
+Cosine similarity stats (min, max, mean): [0.17655864 1.0000001  0.7738863 ]
+Jaccard similarity stats (min, max, mean): [0.         1.         0.00831274]
+weight vector [100 100  64 ... 100  42  42]
