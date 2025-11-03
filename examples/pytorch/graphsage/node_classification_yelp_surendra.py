@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import torchmetrics.functional as MF
 from dgl.sampling.metis_sampling import *
 import tqdm
+from sklearn.metrics import f1_score
 from dgl.data import AsNodePredDataset
 from dgl.dataloading import (
     DataLoader,
@@ -27,9 +28,15 @@ class SAGE(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList()
         # three-layer GraphSAGE-mean
-        self.layers.append(dglnn.SAGEConv(in_size, hid_size, "gcn"))
-        self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "gcn"))
-        self.layers.append(dglnn.SAGEConv(hid_size, out_size, "gcn"))
+        self.layers.append(dglnn.SAGEConv(in_size, hid_size, "mean"))
+        self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "mean"))
+        # self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "mean"))
+        # self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "mean"))
+        self.layers.append(dglnn.SAGEConv(hid_size, out_size, "mean"))
+        # self.layers.append(dglnn.SAGEConv(in_size, hid_size, "gcn"))
+        # self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "gcn"))
+        # self.layers.append(dglnn.SAGEConv(hid_size, out_size, "gcn"))
+
         self.dropout = nn.Dropout(0.5)
         self.hid_size = hid_size
         self.out_size = out_size
@@ -93,12 +100,25 @@ def evaluate(model, graph, dataloader, num_classes):
             x = blocks[0].srcdata["feat"]
             ys.append(blocks[-1].dstdata["label"])
             y_hats.append(model(blocks, x))
+    y_true = torch.cat(ys).cpu().numpy()
+    y_pred = torch.cat(y_hats).sigmoid().cpu().numpy() > 0.5
+    # y_pred = torch.cat(y_hats).sigmoid().numpy() > 0.5
+    # Compute metrics
+    f1_micro = f1_score(y_true, y_pred, average='micro')
+    f1_macro = f1_score(y_true, y_pred, average='macro')         
+    # print("ys: ",ys)
+    # print("y_hats: ",y_hats)
     return MF.accuracy(
         torch.cat(y_hats),
         torch.cat(ys),
-        task="multiclass",
-        num_classes=num_classes,
-    )
+        #task="multiclass",
+        task="multilabel",
+        #num_classes=num_classes,
+        num_labels=num_classes,          # number of classes
+        threshold=0.5          # threshold after applying sigmoid
+
+
+    ),f1_micro,f1_macro
 
 
 def layerwise_infer(device, graph, nid, model, num_classes, batch_size):
@@ -109,9 +129,16 @@ def layerwise_infer(device, graph, nid, model, num_classes, batch_size):
         )  # pred in buffer_device
         pred = pred[nid]
         label = graph.ndata["label"][nid].to(pred.device)
+        y_true = label.cpu().numpy()
+        y_pred = pred.sigmoid().cpu().numpy() > 0.5
+        f1_micro = f1_score(y_true, y_pred, average='micro')
+        f1_macro = f1_score(y_true, y_pred, average='macro')
         return MF.accuracy(
-            pred, label, task="multiclass", num_classes=num_classes
-        )
+            pred, label, task="multilabel",
+            #num_classes=num_classes
+            num_labels=num_classes,          # number of classes
+            threshold=0.5          # threshold after applying sigmoid
+        ),f1_micro,f1_macro
 
 
 def train(args, device, g, 
@@ -124,9 +151,9 @@ def train(args, device, g,
     train_mask=g.ndata['train_mask']
     val_mask=g.ndata['val_mask']
     train_idx = torch.nonzero(train_mask).squeeze().to(device)
-    #print("train :",len(train_idx))
+    #print("# training nodes: ",len(train_idx))
     val_idx = torch.nonzero(val_mask).squeeze().to(device)
-    #print("val: ",len(val_idx))
+    #print("# val nodes: ",len(val_idx))
     sampler_time = time.time()
 
     sampler = NeighborSampler(
@@ -180,6 +207,9 @@ def train(args, device, g,
     total_for_loop_time = 0.0
     total_model_time = 0.0
     epoch_lines = []
+    total_src_nodes_layer_3=0
+    total_src_nodes_layer_2=0
+    total_src_nodes_layer_1=0
 
     for epoch in range(args.epoch):
         model.train()
@@ -209,17 +239,25 @@ def train(args, device, g,
             #print("1st layer:",blocks[0])
             #print("2nd layer:",blocks[1])
             #print("3rd layer:",blocks[-1])
+            if epoch == 0:
+                total_src_nodes_layer_3 = total_src_nodes_layer_3 + blocks[0].num_src_nodes()
+                total_src_nodes_layer_2 = total_src_nodes_layer_2 + blocks[1].num_src_nodes()
+                total_src_nodes_layer_1 = total_src_nodes_layer_1 + blocks[-1].num_src_nodes()
             end_x_y_time = time.time()
 
             start_pred_time = time.time()
             #print("before forward pass\n");
             y_hat = model(blocks, x)
+            # print("y:",y)
+            # print("Shape of y",y.shape)
+            # print("y_hat:",y_hat)
+            # print("Shape of y_hat:",y_hat.shape)
             end_pred_time = time.time()
 
             start_loss_time = time.time()
             #print("After forward pass\n");
-            loss = F.cross_entropy(y_hat, y)
-            #loss = F.binary_cross_entropy_with_logits(y_hat, y.float())
+            #loss = F.cross_entropy(y_hat, y)
+            loss = F.binary_cross_entropy_with_logits(y_hat, y.float())
             end_loss_time = time.time()
 
             start_backward_time = time.time()
@@ -258,14 +296,17 @@ def train(args, device, g,
         total_training_time += execution_time
         total_for_loop_time += iteration_time1
         total_model_time += model_time1
-        acc = evaluate(model, g, val_dataloader, num_classes)
+        if epoch == 0:
+            layer_line = "Layer_1 {:d} | Layer_2 {:d} | Layer_3 {:d}" .format(int(total_src_nodes_layer_1/it), int(total_src_nodes_layer_2/it), int(total_src_nodes_layer_3/it))
+            epoch_lines.append(layer_line)
+        acc,micro,macro = evaluate(model, g, val_dataloader, num_classes)
         #print(
          #   "\nEpoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {}\n".format(
           #       epoch, total_loss / (it + 1), acc.item(), execution_time
            #  )
         #)
         #epoch_line = "Epoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {}".format(epoch, total_loss / (it + 1), acc.item(), execution_time )
-        epoch_line = "Epoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {:.4f} | Loop_Time : {:.4f} | Model_Time : {:.4f} | x_y_time : {:.4f} | pred_time : {:.4f} | backward_time : {:.4f} | optim_time : {:.4f} ".format(epoch, total_loss / (it + 1), acc.item(), execution_time, iteration_time1, model_time1, x_y_time, pred_time, backward_time, optim_time )
+        epoch_line = "Epoch {:05d} | Loss {:.4f} | Accuracy {:.4f}| f1_micro {:.4f} | f1_macro {:.4f} | Time : {:.4f} | Loop_Time : {:.4f} | Model_Time : {:.4f} | x_y_time : {:.4f} | pred_time : {:.4f} | backward_time : {:.4f} | optim_time : {:.4f} ".format(epoch, total_loss / (it + 1), acc.item(), micro.item(), macro.item(), execution_time, iteration_time1, model_time1, x_y_time, pred_time, backward_time, optim_time )
         #print("Epoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {:.4f} | Loop_Time : {:.4f} | Model_Time : {:.4f} | x_y_time : {:.4f} | pred_time : {:.4f} | backward_time : {:.4f} | optim_time : {:.4f} ".format(epoch, total_loss / (it + 1), acc.item(), execution_time, iteration_time1, model_time1, x_y_time, pred_time, backward_time, optim_time ))
 
         epoch_lines.append(epoch_line)
@@ -293,7 +334,7 @@ if __name__ == "__main__":
         "--method",
         default="cling",
         choices=["graphsage", "cling"],
-        help="graphsagse vs cling",
+        help="graphsage vs cling",
         )
     parser.add_argument(
         "--dt",
@@ -338,12 +379,12 @@ if __name__ == "__main__":
         dataset = AsNodePredDataset(DglNodePropPredDataset("ogbn-products"))
     elif args.dataset == "ogbn-arxiv":
         dataset = AsNodePredDataset(DglNodePropPredDataset("ogbn-arxiv"))
-    # elif args.dataset == "amazon_products":
-    #     load_path = '/data/Dataset/gnn_dataset/amazon_products.dgl'
-    #     dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "amazon_products":
+        load_path = '/data/Dataset/gnn_dataset/amazon_products.dgl'
+        dataset, _ = dgl.load_graphs(load_path)
     elif args.dataset == "cit-net":
         load_path = '/data/Dataset/gnn_dataset/citations_network_graph.dgl'
-        dataset, _ = dgl.load_graphs(load_path)   
+        dataset, _ = dgl.load_graphs(load_path)
     elif args.dataset == "igb-tiny":
         load_path = './dataset/igb_tiny.dgl'
         dataset, _ = dgl.load_graphs(load_path)
@@ -358,18 +399,22 @@ if __name__ == "__main__":
         dataset, _ = dgl.load_graphs(load_path)
     elif args.dataset == "amazon_products":
         load_path = './dataset/amazon_products.dgl'
-        dataset, _ = dgl.load_graphs(load_path)     
+        dataset, _ = dgl.load_graphs(load_path)       
     else:
         raise ValueError("Unknown dataset: {}".format(args.dataset))
     g = dataset[0]
+    # print(g)
+    #print(g.ndata["feat"])
     
-    """
+    
     #printing and ploting graph degree related information.
-    out_degrees = np.array(g.out_degrees())
-    max_value = np.max(out_degrees)
-    avg_value = np.mean(out_degrees)
-    print("maximum degree : ",max_value)
-    print("Average degree : ",avg_value)
+    # out_degrees = np.array(g.out_degrees())
+    # max_value = np.max(out_degrees)
+    # avg_value = np.mean(out_degrees)
+    # print("maximum degree : ",max_value)
+    # print("Average degree : ",avg_value)
+
+    """
     # Count the number of nodes with in-degree less than 100
     num_nodes_less_than_100 = len(out_degrees[out_degrees < 100])
     num_nodes_less_than_128 = len(out_degrees[out_degrees < 64])
@@ -422,7 +467,7 @@ if __name__ == "__main__":
     method = get_method(method)
     test_mask=g.ndata['test_mask']
     test_idx = torch.nonzero(test_mask).squeeze()
-    #print("test: ",len(test_idx))
+    # print("# test_nodes: ",len(test_idx))
     g = g.to("cuda" if args.mode == "puregpu" else "cpu")
     #columns = ['Data']
     #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/cluster_id.txt',names=columns)
@@ -436,15 +481,17 @@ if __name__ == "__main__":
     #print(type(cluster_id))
     #print("Device of cluster_id ", cluster_id.device)
 
-    #num_classes = dataset.num_classes
-    num_classes = int(labels.max().item()) + 1
+    num_classes = dataset.num_classes
+    labels = g.ndata["label"]
+    #num_classes = int(labels.max().item()) + 1
     #num_classes = 107
     device = torch.device("cpu" if args.mode == "cpu" else "cuda")
 
     # create GraphSAGE model
     in_size = g.ndata["feat"].shape[1]
-    #out_size = dataset.num_classes
-    out_size = int(labels.max().item()) + 1
+    # print("Feature_dim: ",in_size)
+    out_size = dataset.num_classes
+    #out_size = int(labels.max().item()) + 1
     #out_size = 107
     model = SAGE(in_size, 256, out_size).to(device)
 
@@ -460,8 +507,8 @@ if __name__ == "__main__":
                         dataset, model, num_classes)
 
     # test the model
-    print("Testing...")
-    acc = layerwise_infer(
+    #print("Testing...")
+    acc,f1_micro,f1_macro = layerwise_infer(
         device, g, test_idx, model, num_classes, batch_size=4096
     )
     #acc = layerwise_infer(
@@ -472,6 +519,9 @@ if __name__ == "__main__":
     #print("Test Accuracy {:.4f}".format(acc.item()))
     #print("Execution time:", execution_time, "seconds")
     Accuracy = "Test Accuracy {:.4f}".format(acc.item())
+    # print("\nTest Accuracy {:.4f}".format(acc))
+    # print("\nTest F1 Micro {:.4f}".format(f1_micro))
+    # print("\nTest F1 Macro {:.4f}".format(f1_macro))
     #tt_time = "Total Training time {:.4f}".format( total_training_time)
     #epoch_lines.append(tt_time)
     epoch_lines.append(Accuracy)

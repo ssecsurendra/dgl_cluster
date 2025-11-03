@@ -8,8 +8,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchmetrics.functional as MF
-import tqdm
-from dgl.metis_sampling import *
+from tqdm import tqdm
+# from dgl.metis_sampling import *
 from dgl.data import AsNodePredDataset
 from dgl.dataloading import (
     DataLoader,
@@ -19,6 +19,7 @@ from dgl.dataloading import (
 from ogb.nodeproppred import DglNodePropPredDataset
 
 from dgl.data import CoraGraphDataset,RedditDataset,FlickrDataset, YelpDataset
+from sklearn.metrics import roc_auc_score
 
 
 print("at the top")
@@ -70,7 +71,7 @@ class SAGE(nn.Module):
                 pin_memory=pin_memory,
             )
             feat = feat.to(device)
-            for input_nodes, output_nodes, blocks in tqdm.tqdm(dataloader):
+            for input_nodes, output_nodes, blocks in tqdm(dataloader):
                 x = feat[input_nodes]
                 h = layer(blocks[0], x)  # len(blocks) = 1
                 if l != len(self.layers) - 1:
@@ -91,21 +92,17 @@ def evaluate(model, graph, dataloader, num_classes):
             x = blocks[0].srcdata["feat"]
             ys.append(blocks[-1].dstdata["label"])
             y_hats.append(model(blocks, x))
-    # return MF.accuracy(
-    #     # torch.cat(y_hats),
-    #     # torch.cat(ys),
-    #     # task="multiclass",
-    #     # num_classes=num_classes,
-    #     (torch.cat(y_hats).sigmoid() > 0.5).int(),
-    #     torch.cat(ys).int(),
-    #     task="multiclass",
-    #     num_classes=num_classes,
-    # )
-    preds = (torch.cat(y_hats).sigmoid() > 0.5).int()
-    labels = torch.cat(ys).int()
-    acc = (preds == labels).float().mean()  # mean over all labels and samples
-    return acc
-    # return acc.item()
+    return MF.accuracy(
+        torch.cat(y_hats),
+        torch.cat(ys),
+        task="multilabel",
+        # task="multiclass",
+        # num_classes=num_classes,
+        num_labels=num_classes,          # number of classes
+        threshold=0.5          # threshold after applying sigmoid
+
+    )
+
 
 def layerwise_infer(device, graph, nid, model, num_classes, batch_size):
     model.eval()
@@ -115,18 +112,13 @@ def layerwise_infer(device, graph, nid, model, num_classes, batch_size):
         )  # pred in buffer_device
         pred = pred[nid]
         label = graph.ndata["label"][nid].to(pred.device)
-                # Apply sigmoid to logits and threshold
-        pred_labels = (pred.sigmoid() > 0.5).int()
-        label = label.int()
+        return MF.accuracy(
+            pred, label, task="multilabel", 
+            # num_classes=num_classes
+            num_labels=num_classes,          # number of classes
+            threshold=0.5          # threshold after applying sigmoid
 
-        # Compute accuracy as exact match or elementwise
-        correct = (pred_labels == label).float()
-        acc = correct.mean()  # mean over all samples and classes
-        return acc
-        # return MF.accuracy(
-        #     pred, label, task="multiclass", num_classes=num_classes
-        # )
-
+        )
 
 def train(args, device, g, dataset, model, num_classes):
     # create sampler & dataloader
@@ -221,6 +213,7 @@ def train(args, device, g, dataset, model, num_classes):
             # print(type(y_hat))
             # print("y_hat: ", y_hat)
             # print("len: ", len(y_hat))
+            # print("y_hat shape: ", y_hat.shape)
             end_pred_time = time.time()
             
             start_loss_time = time.time()
@@ -262,11 +255,11 @@ def train(args, device, g, dataset, model, num_classes):
         total_loss_opt_time += loss_opt_time
         # print("training time:", execution_time, "seconds")
         acc = evaluate(model, g, val_dataloader, num_classes)
-        # print(
-        #     "\nEpoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {}".format(
-        #          epoch, total_loss / (it + 1), acc.item(), execution_time
-        #      )
-        #  )
+        print(
+            "\nEpoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {}".format(
+                 epoch, total_loss / (it + 1), acc.item(), execution_time
+             )
+         )
         epoch_line = "Epoch {:05d} | Loss {:.4f} | Accuracy {:.4f} | Time : {:.4f} | loop {:.4f} | Model {:.4f} | x_y_time {:.4f} | pred {:.4f} | loss_time {:.4f}".format(
                     epoch, total_loss / (it + 1), acc.item(), execution_time, loop_exe_time, model_exe_time, x_y_time, pred_time, loss_opt_time
         )
@@ -299,7 +292,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--dataset",
-        default="ogbn-products",
+        default="yelp",
         # choices=["ogbn-products", "ogbn-arxiv", "ogbn-papers100M", "reddit"],
         help="pass dataset",
     )
@@ -374,7 +367,7 @@ if __name__ == "__main__":
 
     g = dataset[0]
     print("metis partition called")
-    part_array = get_part_array(g, args.parts, args.method, spmm_method, sampling_method)
+    # part_array = get_part_array(g, args.parts, args.method, spmm_method, sampling_method)
     g = g.to("cuda" if args.mode == "puregpu" else "cpu")
     device = torch.device("cpu" if args.mode == "cpu" else "cuda")
     test_mask=g.ndata['test_mask']
@@ -410,12 +403,12 @@ if __name__ == "__main__":
     # test the model
     print("\nTesting...")
     acc = layerwise_infer(
-        device, g, test_idx, model, num_classes, batch_size=8192
+        device, g, test_idx, model, num_classes, batch_size=4096
     )
-    #print("\nTest Accuracy {:.4f}".format(acc.item()))
+    print("\nTest Accuracy {:.4f}".format(acc.item()))
     Accuracy = "Test Accuracy {:.4f}".format(acc.item())
     epoch_lines.append(Accuracy)
-    with open('epoch_data.txt', 'w') as file:
+    with open('epoch_data_yelp.txt', 'w') as file:
         for value in epoch_lines:
             file.write(str(value) + '\n')
 

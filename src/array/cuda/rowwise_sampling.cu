@@ -904,6 +904,7 @@ COOMatrix _CSRRowWiseSamplingUniform(
     cudaEventElapsedTime(&milliseconds, start, stop);
     sampling_time += milliseconds/1000;
     printf("cuda sampling time %.6f\n", sampling_time);
+    // printf("kernel zero called\n");
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
   }
@@ -1570,7 +1571,7 @@ COOMatrix _CSRRowWiseSamplingUniform3(
   //cudaEventDestroy(stop);
 
   const int64_t num_rows = rows->shape[0];
-  //printf("Number of seed nodes %lld\n",num_rows);
+  // printf("Number of seed nodes %lld\n",num_rows);
 
   const IdType* const slice_rows = static_cast<const IdType*>(rows->data);
   //const int64_t* const slice_rows1 = static_cast<const int64_t*>(rows->data);
@@ -1595,6 +1596,15 @@ COOMatrix _CSRRowWiseSamplingUniform3(
     ? static_cast<IdType*>(GetDevicePointer(mat.data))
     : nullptr;
   const int64_t num_nodes = mat.num_rows;
+  // int print_count = 20;  // first 10 entries
+  // std::vector<IdType> host_cols(print_count);
+  // cudaMemcpy(host_cols.data(), in_cols,
+  //            print_count * sizeof(IdType),
+  //            cudaMemcpyDeviceToHost);
+  // for (int i = 0; i < print_count; i++) {
+  //     std::cout << host_cols[i] << " ";
+  // }
+  // std::cout << std::endl;
   //printf("Number of elements in graph %lld\n",num_nodes);
   //for(long long int i=0; i<num_nodes; i++)
   //printf("%lld \n",parts_array[i]);  

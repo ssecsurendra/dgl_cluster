@@ -29,13 +29,13 @@ set ytics font "Arial,45 italic bold"
 #set xrange [-0.1:3.7]  # Adjust this range to remove extra space on the left side
 #set xrange [-0.6:2.7]  # Adjust this range to remove extra space on the left side
 set xrange [0:100]
-set yrange [0.5:1.0]
+set yrange [0.0:1.0]
 set ytics 0.1
 # Plot the data from a text file
 plot 'accuracy_line_product.txt' using 0:1 every ::2 with linespoints title 'CLING' lw 1 pt 12, \
-     '' using 0:2 every ::2 with linespoints title 'GraphSAGE' lw 1 pt 12, \
-     '' using 0:3 every ::2 with linespoints title 'gSampler' lw 3 pt 12, \
-     '' using 0:4 every ::2 with linespoints title 'LADIES' lw 1 pt 12
+     '' using 0:2 every ::2 with linespoints title 'DGL' lw 1 pt 12, \
+     #'' using 0:3 every ::2 with linespoints title 'gSampler' lw 3 pt 12, \
+     #'' using 0:4 every ::2 with linespoints title 'LADIES' lw 1 pt 12
 # Close the output file
 set output
 

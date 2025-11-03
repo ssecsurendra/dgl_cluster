@@ -33,7 +33,7 @@ set ytics 100
 # Plot the data from a text file
 # Skip the first 2 header lines
 plot 'Memory_usage_reddit.dat' using 0:1 every ::2 with linespoints title 'CLING' lt 1 lw 2 lc rgb 'blue' pt 2, \
-     '' using 0:2 every ::2 with linespoints title 'GraphSAGE' lt 1 lw 2 lc rgb 'purple' pt 5, \
+     '' using 0:2 every ::2 with linespoints title 'DGL' lt 1 lw 2 lc rgb 'purple' pt 5, \
 #     '' using 0:3 every ::2 with linespoints title 'CLING Layer 3' lt 1 lw 2 lc rgb 'blue' pt 1, \
 #     '' using 0:4 every ::2 with linespoints title 'GraphSAGE Layer 1' lt 1 lw 2 lc rgb 'purple' pt 2, \
 #     '' using 0:5 every ::2 with linespoints title 'GraphSAGE Layer 2' lt 1 lw 2 lc rgb 'purple' pt 5, \

@@ -117,8 +117,8 @@ if __name__ == "__main__":
     sorted_list = sorted(my_list)
 
     # Get the least k elements
-    #least_k_elements = sorted_list[:2*args.num_clusters]
-    least_k_elements = sorted_list[:args.num_clusters]
+    least_k_elements = sorted_list[:2*args.num_clusters]
+    #least_k_elements = sorted_list[:args.num_clusters]
     least_k_elements = torch.tensor(least_k_elements)
     #print("Least similarity")
     #print(least_k_elements)

@@ -29,7 +29,13 @@ class SAGE(nn.Module):
         # three-layer GraphSAGE-mean
         self.layers.append(dglnn.SAGEConv(in_size, hid_size, "mean"))
         self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "mean"))
+        # self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "mean"))
+        # self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "mean"))
         self.layers.append(dglnn.SAGEConv(hid_size, out_size, "mean"))
+        # self.layers.append(dglnn.SAGEConv(in_size, hid_size, "gcn"))
+        # self.layers.append(dglnn.SAGEConv(hid_size, hid_size, "gcn"))
+        # self.layers.append(dglnn.SAGEConv(hid_size, out_size, "gcn"))
+
         self.dropout = nn.Dropout(0.5)
         self.hid_size = hid_size
         self.out_size = out_size
@@ -124,9 +130,9 @@ def train(args, device, g,
     train_mask=g.ndata['train_mask']
     val_mask=g.ndata['val_mask']
     train_idx = torch.nonzero(train_mask).squeeze().to(device)
-    #print("train :",len(train_idx))
+    #print("# training nodes: ",len(train_idx))
     val_idx = torch.nonzero(val_mask).squeeze().to(device)
-    #print("val: ",len(val_idx))
+    #print("# val nodes: ",len(val_idx))
     sampler_time = time.time()
 
     sampler = NeighborSampler(
@@ -221,11 +227,16 @@ def train(args, device, g,
             start_pred_time = time.time()
             #print("before forward pass\n");
             y_hat = model(blocks, x)
+            # print("y:",y)
+            # print("Shape of y",y.shape)
+            # print("y_hat:",y_hat)
+            # print("Shape of y_hat:",y_hat.shape)
             end_pred_time = time.time()
 
             start_loss_time = time.time()
             #print("After forward pass\n");
             loss = F.cross_entropy(y_hat, y)
+            #loss = F.binary_cross_entropy_with_logits(y_hat, y.float())
             end_loss_time = time.time()
 
             start_backward_time = time.time()
@@ -302,7 +313,7 @@ if __name__ == "__main__":
         "--method",
         default="cling",
         choices=["graphsage", "cling"],
-        help="graphsagse vs cling",
+        help="graphsage vs cling",
         )
     parser.add_argument(
         "--dt",
@@ -316,7 +327,7 @@ if __name__ == "__main__":
         default="ogbn-arxiv",
         #help="Dataset name ('cora', 'flickr', 'reddit', 'yelp', 'ogbn-products','ogbn-arxiv').",
     )
-    parser.add_argument("--fanout", type=str, default="10,10,10")
+    parser.add_argument("--fanout", type=str, default="20,20,20")
     parser.add_argument("--num_clusters", type=str, default="20")
     #parser.add_argument("--fan_out", type=str, default="10,10,10,10,10")
     #parser.add_argument("--fan_out", type=str, default="25,10")
@@ -352,49 +363,120 @@ if __name__ == "__main__":
         dataset, _ = dgl.load_graphs(load_path)
     elif args.dataset == "cit-net":
         load_path = '/data/Dataset/gnn_dataset/citations_network_graph.dgl'
-        dataset, _ = dgl.load_graphs(load_path)    
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "igb-tiny":
+        load_path = './dataset/igb_tiny.dgl'
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "igb-medium":
+        load_path = './dataset/igb_medium.dgl'
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "wiki":
+        load_path = './dataset/wikidata5M/wikidata5m_dgl_graph.bin'
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "igb-small":
+        load_path = './dataset/igb_small.dgl'
+        dataset, _ = dgl.load_graphs(load_path)
+    elif args.dataset == "amazon_products":
+        load_path = './dataset/amazon_products.dgl'
+        dataset, _ = dgl.load_graphs(load_path)       
     else:
         raise ValueError("Unknown dataset: {}".format(args.dataset))
     g = dataset[0]
+    # indptr, indices, edge_ids = g.adj_tensors('csr')
+    # print("indices before: ",indices)
+    #print(g)
+    #print(g.ndata["feat"])
     
-    """
+    
     #printing and ploting graph degree related information.
     out_degrees = np.array(g.out_degrees())
     max_value = np.max(out_degrees)
     avg_value = np.mean(out_degrees)
     print("maximum degree : ",max_value)
     print("Average degree : ",avg_value)
+
+
     # Count the number of nodes with in-degree less than 100
     num_nodes_less_than_100 = len(out_degrees[out_degrees < 100])
     num_nodes_less_than_128 = len(out_degrees[out_degrees < 64])
+    num_nodes_degree_greater_than_1000 = len(out_degrees[out_degrees > 1000])
+    percentage_degrre_greater_than_1000 = (num_nodes_degree_greater_than_1000/len(out_degrees))*100
     print("Total number of nodes with in-degree less than 100:", num_nodes_less_than_100)
-    print("Total number of nodes with in-degree less than 64:", num_nodes_less_than_128)
+    print("Total number of nodes with in-degree less than 128:", num_nodes_less_than_128)
+    print("Total number of nodes with out-degree greater than 1000: ", num_nodes_degree_greater_than_1000)
+    print("Percentage: ", percentage_degrre_greater_than_1000)
     unique_values, frequencies = np.unique(out_degrees, return_counts=True)
-    
+
     # Create a TSV file
     output_file = str(args.dataset) + ".tsv"
     # Write unique values and frequencies to the TSV file
     np.savetxt(output_file, np.column_stack((unique_values, frequencies)), delimiter='\t', fmt='%d')
+    # # Plot degree distribution (filtered for degrees between 20 and 30)
+    mask = (unique_values >= 20) & (unique_values <= 300)
+    # mask = (unique_values >= 20) & (unique_values <= 1000)
+    filtered_degrees = unique_values[mask]
+    filtered_freqs = frequencies[mask]
+    # Adjust left and right margins
+    plt.subplots_adjust(left=0.2, bottom=0.2)
 
-    plt.bar(unique_values, frequencies)
-    plt.xlabel('Degree of Vertex', fontsize=12)
-    plt.ylabel('Frequency', fontsize=12)
-    #plt.ylim(0, 200000)
-    #max_y = max(frequencies)
-    highest_y = np.max(frequencies)
-    highest_x = unique_values[np.argmax(frequencies)]
-    plt.annotate(str(highest_y), xy=(highest_x, highest_y), ha='center', va='bottom', fontsize=18)
+    plt.bar(filtered_degrees, filtered_freqs)
+    plt.xlabel('Degree of Vertex', fontsize=20)
+    plt.ylabel('Frequency', fontsize=20)
 
-    # Add text annotation for the highest value
-    #plt.text(unique_values[frequencies.index(max_y)], max_y, str(max_y), ha='center', va='bottom')
-    plt.xticks(fontsize=12)
-    plt.yticks(fontsize=12)
+    # Annotate highest frequency in the range 20-30
+    # if len(filtered_freqs) > 0:
+    #     highest_y = np.max(filtered_freqs)
+    #     highest_x = filtered_degrees[np.argmax(filtered_freqs)]
+    #     plt.annotate(str(highest_y), xy=(highest_x, highest_y), ha='center', va='bottom', fontsize=18)
+
+    #plt.xticks(fontsize=12)
+    # new code
+    plt.yticks(fontsize=16)
     plt.yscale('log')
-    plt.ylim(1, 10**7)
-    #plt.title('Degree Distribution')
-    plot_name = str(args.dataset) + ".eps"
+    plt.ylim(1, 10**5)
+    #plt.ylim(0, 20000)
+    plt.xlim(20, 1000)
+    # plt.xlim(20, 1000)
+    # Set custom Y-ticks from 0 to 20000 with step size 5000
+    # plt.yticks(np.arange(0, 20001, 5000), fontsize=12)
+    # current_ticks = plt.xticks()[0]
+    # if 20 not in current_ticks:
+    #     current_ticks = np.append(current_ticks, 20)
+    #     current_ticks = np.sort(current_ticks)
+    # plt.xticks(current_ticks, fontsize=12)
+    # Ensure 20 appears on the x-axis
+    xticks = plt.xticks()[0]
+    current_xticks = xticks[xticks != 0]       # Remove 0 if it's there
+    if 20 not in current_xticks:
+        updated_xticks = np.append(current_xticks, 20)
+        updated_xticks = np.sort(updated_xticks)
+        plt.xticks(updated_xticks, fontsize=16)
+    else:
+        plt.xticks(current_xticks, fontsize=16)
+
+    plot_name = str(args.dataset) + "_degree_distribution.eps"
     plt.savefig(plot_name, format='eps')
-    """
+
+    ## old code
+    # plt.bar(unique_values, frequencies)
+    # plt.xlabel('Degree of Vertex', fontsize=12)
+    # plt.ylabel('Frequency', fontsize=12)
+    # #plt.ylim(0, 200000)
+    # #max_y = max(frequencies)
+    # highest_y = np.max(frequencies)
+    # highest_x = unique_values[np.argmax(frequencies)]
+    # plt.annotate(str(highest_y), xy=(highest_x, highest_y), ha='center', va='bottom', fontsize=18)
+    #
+    # # Add text annotation for the highest value
+    # #plt.text(unique_values[frequencies.index(max_y)], max_y, str(max_y), ha='center', va='bottom')
+    # plt.xticks(fontsize=12)
+    # plt.yticks(fontsize=12)
+    # plt.yscale('log')
+    # plt.ylim(1, 10**7)
+    # #plt.title('Degree Distribution')
+    # plot_name = str(args.dataset) + ".eps"
+    # plt.savefig(plot_name, format='eps')
+    
     #start_time = time.time()
     if not torch.cuda.is_available():
         args.mode = "cpu"
@@ -416,7 +498,7 @@ if __name__ == "__main__":
     method = get_method(method)
     test_mask=g.ndata['test_mask']
     test_idx = torch.nonzero(test_mask).squeeze()
-    #print("test: ",len(test_idx))
+    # print("# test_nodes: ",len(test_idx))
     g = g.to("cuda" if args.mode == "puregpu" else "cpu")
     #columns = ['Data']
     #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/cluster_id.txt',names=columns)
@@ -430,13 +512,17 @@ if __name__ == "__main__":
     #print(type(cluster_id))
     #print("Device of cluster_id ", cluster_id.device)
 
-    num_classes = dataset.num_classes
+    #num_classes = dataset.num_classes
+    labels = g.ndata["label"]
+    num_classes = int(labels.max().item()) + 1
     #num_classes = 107
     device = torch.device("cpu" if args.mode == "cpu" else "cuda")
 
     # create GraphSAGE model
     in_size = g.ndata["feat"].shape[1]
-    out_size = dataset.num_classes
+    # print("Feature_dim: ",in_size)
+    #out_size = dataset.num_classes
+    out_size = int(labels.max().item()) + 1
     #out_size = 107
     model = SAGE(in_size, 256, out_size).to(device)
 
@@ -452,7 +538,7 @@ if __name__ == "__main__":
                         dataset, model, num_classes)
 
     # test the model
-    print("Testing...")
+    #print("Testing...")
     acc = layerwise_infer(
         device, g, test_idx, model, num_classes, batch_size=4096
     )

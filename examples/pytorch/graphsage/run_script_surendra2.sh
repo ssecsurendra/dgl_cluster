@@ -5,10 +5,11 @@ dataset=$1
 #fanout = $2
 #batch_size = $3
 epoch=$2
-batch_sizes=(1024 2048 4096 8192 16384 32768 65536)
-#batch_sizes=(2048)
-#fanouts=(30)
-fanouts=(10 15 20)
+method=$3
+#batch_sizes=(1024 2048 4096 8192 16384 32768 65536)
+batch_sizes=(1024)
+fanouts=(20)
+#fanouts=(10 15 20)
 for fanout in "${fanouts[@]}"; do
   # Loop through each batch size
   for batch_size in "${batch_sizes[@]}"; do
@@ -18,7 +19,8 @@ for fanout in "${fanouts[@]}"; do
     last_spmm_time=0.0
     last_cuda_sampling_time=0.0
     add_spmm_time=true
-    output=$(python3 node_classification1.py --dataset=$1 --batch_size=$batch_size --mode=puregpu --fan_out=$fanout,$fanout,$fanout --epoch=$2)
+    output=$(python3 node_classification1.py --dataset=$1 --batch_size=$batch_size --mode=puregpu --fanout=$fanout,$fanout,$fanout --epoch=$2)
+    #output=$(python3 node_classification1.py --dataset=$1 --batch_size=$batch_size --mode=puregpu --fanout=$fanout,$fanout,$fanout --epoch=$2 --method=$3)
     #filename="SPMM_time_surendra/$1_F${fanout}_B${batch_size}_puregpu_$2.txt"
     filename="time_surendra3_4/cluster_20/V_1_100$1_F${fanout}_B${batch_size}_puregpu_$2.txt"
     #filename="epoch1_time_surendra/$1_F${fanout}_B${batch_size}_puregpu_$2.txt"
@@ -33,6 +35,7 @@ for fanout in "${fanouts[@]}"; do
       if [[ $line == spmm\ time* ]] && $add_spmm_time; then
         # Extract the time value and add it to the sampling time
         #echo $line
+        #echo "spmm"
         # spmm_time_value=$(echo $line | awk '{print $3}')
         last_spmm_time=$(echo $line | awk '{print $3}')
 
@@ -42,6 +45,7 @@ for fanout in "${fanouts[@]}"; do
       elif [[ $line == cuda\ sampling\ time* ]]; then
         # Extract the time value and add it to the sampling time
         #echo $line
+        #echo "cuda"
         # time_value=$(echo $line | awk '{print $4}')
         last_cuda_sampling_time=$(echo $line | awk '{print $4}')
         #echo $time_value
