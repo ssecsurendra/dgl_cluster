@@ -293,14 +293,38 @@ if __name__ == "__main__":
     print("Average degree : ",avg_value)
     # Count the number of nodes with in-degree less than 100
     num_nodes_less_than_100 = len(out_degrees[out_degrees < 100])
+    num_nodes_greter_then_256 = len(out_degrees[out_degrees > 256])
     num_nodes_less_than_128 = len(out_degrees[out_degrees < 128])
     num_nodes_less_than_1024 = len(out_degrees[out_degrees < 1024])
     num_nodes_less_than_1024_1 = len(out_degrees[out_degrees >= 1024])
     print("Total number of nodes with in-degree less than 100:", num_nodes_less_than_100)
+    print("Total number of nodes with in-degree greter than 256:", num_nodes_greter_then_256)
+    
     print("Total number of nodes with in-degree less than 1024:", num_nodes_less_than_1024)
     print("Total number of nodes with in-degree greter than 1024:", num_nodes_less_than_1024_1)
     print("Total number of nodes with in-degree less than 128:", num_nodes_less_than_128)
     unique_values, frequencies = np.unique(out_degrees, return_counts=True)
+
+    train_mask=g.ndata['train_mask']
+    val_mask=g.ndata['val_mask']
+    train_idx = torch.nonzero(train_mask).squeeze()
+    val_idx = torch.nonzero(val_mask).squeeze()
+
+    tidx_degrees = np.array(out_degrees[np.array(train_idx)])
+    # num_nodes_less_than_100 = len(out_degrees[tidx_degrees < 100])
+    num_nodes_less_than_100 = np.sum(tidx_degrees < 100)
+    num_nodes_greter_then_256 = np.sum(tidx_degrees < 256)
+    # num_nodes_less_than_128 = len(out_degrees[tidx_degrees < 128])
+    # num_nodes_less_than_1024 = len(out_degrees[tidx_degrees < 1024])
+    # num_nodes_less_than_1024_1 = len(out_degrees[tidx_degrees >= 1024])
+    print("--------------------------------------------------------------")
+    print("Total number of nodes with in-degree less than 100:", num_nodes_less_than_100)
+    print("Total number of nodes with in-degree greter than 256:", num_nodes_greter_then_256)
+    
+    # print("Total number of nodes with in-degree less than 1024:", num_nodes_less_than_1024)
+    # print("Total number of nodes with in-degree greter than 1024:", num_nodes_less_than_1024_1)
+    # print("Total number of nodes with in-degree less than 128:", num_nodes_less_than_128)
+  
     #
     # # Create a TSV file
     # output_file = str(args.dataset) + ".tsv"

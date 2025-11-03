@@ -35,7 +35,7 @@ set xtics 20
 #set logscale y
 # Plot the data from a text file
 plot 'GMemory_Accesses_product.dat' using 0:1 with linespoints title 'CLING' lw 4 lc rgb 'blue' pt 12, \
-     '' using 0:2 with linespoints title 'GraphSAGE' lw 4 lc rgb 'purple' pt 12
+     '' using 0:2 with linespoints title 'DGL' lw 4 lc rgb 'purple' pt 12
 # Close the output file
 set output
 

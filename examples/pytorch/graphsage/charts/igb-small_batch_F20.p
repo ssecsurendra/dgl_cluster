@@ -1,7 +1,7 @@
 # Set terminal to EPS and output file name
 set terminal postscript eps enhanced color solid font 'Helvetica,25' size 9.0,6.0
 #set terminal postscript eps enhanced color font 'Helvetica,10'
-set output 'reddit_batch_F15.eps'
+set output 'igb-small_batch_F20.eps'
 set boxwidth 0.9 absolute
 set style fill solid 1.00 border lt -1
 # Set the legend (key) font
@@ -24,15 +24,15 @@ set grid ytics
 
 # Set xtics (x-axis labels) from the first column (no rotation)
 #set xtics nomirror
-set xtics font "Arial,60 italic bold"
-set ytics font "Arial,60 italic bold"
+set xtics font "Arial,45 italic bold"
+set ytics font "Arial,45 italic bold"
 set xtics rotate by -45
 # Remove extra space between Y-axis and first bar by setting x range
 #set xrange [-0.9:3.5]  # Adjust this range to remove extra space on the left side
 #set xrange [-0.6:2.7]  # Adjust this range to remove extra space on the left side
 
 # Plot the data from a text file
-plot 'reddit_batch_15.txt' using 2:xtic(1) title 'DGL' lt rgb "skyblue", \
+plot 'igb-small_batch_20.txt' using 2:xtic(1) title 'DGL' lt rgb "skyblue", \
      '' using 3 title 'CLING' lt rgb "orange"
      #'' using 4 title 'F:20' lt rgb "forest-green"
 # Close the output file

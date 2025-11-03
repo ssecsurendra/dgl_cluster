@@ -4,6 +4,7 @@ import sys
 import dgl
 import time
 import torch as th
+import pymetis
 #import gc
 from scipy.io import mmread
 import os
@@ -19,6 +20,7 @@ import copy
 import random
 import pymetis
 import dgl.data
+# from . import backend as F, utils
 from dgl import AddSelfLoop
 from dgl.data import AsNodePredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
@@ -78,8 +80,13 @@ void similarity_kernel(
         //int union_count = (src_end - src_start) + (dst_end - dst_start) - intersection;
 
         float jaccard = count_union > 0 ? (float)count_intersection / count_union : 0.0f;
-
+        //std::cout<<"jaccard:"<<jaccard<<"\n";
+        //printf("jaccard: %f\n",jaccard);
+        //edge_weights[e] = (jaccard)*50;
+        //edge_weights[e] = 5;
+        //float weight = (cosine + jaccard)*50;
         edge_weights[e] = (cosine + jaccard)*50;
+        //edge_weights[e] = weight > 0 ? weight : 1.0f;
 
    }
    }
@@ -218,8 +225,15 @@ if __name__ == "__main__":
     # ---------------------- DGL PREPROCESS -----------------------------------#
     Nodes = G.num_nodes()
     Edges = G.num_edges()
+    # row_ptr = np.array(G.adj_tensors('csr')[0])
+    # col_idx = np.array(G.adj_tensors('csr')[1])
+     # ensure undirected
+    G = dgl.to_bidirected(G, copy_ndata=True)
     row_ptr = np.array(G.adj_tensors('csr')[0])
     col_idx = np.array(G.adj_tensors('csr')[1])
+    indptr, indices, _ = G.adj_tensors('csr')
+    row_ptr = list(map(int, indptr.numpy()))   # convert to list of ints
+    col_idx = list(map(int, indices.numpy()))  # same for adjacency
     row_ptr_s = len(row_ptr)
     col_idx_s = len(col_idx)
     print(row_ptr_s)
@@ -324,23 +338,22 @@ if __name__ == "__main__":
 
     # Convert weight_vector back to PyTorch for DGL compatibility
     ##weight_vector_torch = th.tensor(cp.asnumpy(weight_vector), dtype=th.int64)
-    weight_vector_torch = th.tensor(cp.asnumpy(edge_weights))
+    weight_vector_torch = th.tensor(cp.asnumpy(edge_weights), dtype = th.int32)
+    #print("weight vector: ",weight_vector_torch)
     G.edata['weight'] = weight_vector_torch
-
-    # Convert to lists for PyMetis
-    # xadj = cp.asnumpy(row_ptr).tolist()
-    # adjncy = cp.asnumpy(col_idx).tolist()
-    # adjwgt = cp.asnumpy(weight_vector).tolist()
-
+    #G.edata['w'] = weight_vector_torch
     nopart = args.num_clusters
     print("Start Partitioning Weight_graph.....")
     start = time.time()
     try:
-        node_parts_weight = dgl.metis_partition_assignment(G, nopart)
+        #node_parts_weight = dgl.metis_partition_assignment(G, nopart, balance_edges=True)
+        n_cuts, node_parts_weight = pymetis.part_graph(nopart, xadj=row_ptr, adjncy=col_idx, eweights=weight_vector_torch)
+   
     except Exception as e:
-        print(f"METIS partitioning failed: {e}")
-        sys.exit(1)
+      print(f"METIS partitioning failed: {e}")
+      sys.exit(1)
     end = time.time()
+    #print(type(node_parts_weight))
     #totalTime = totalTime + (end - start)
     print("Partition is Done !!!!!\t Time of Partition is :", round((end - start), 4), "Seconds")
     mem_usage = (psutil.Process().memory_info().rss) / (1024 * 1024 * 1024)
@@ -365,6 +378,7 @@ if __name__ == "__main__":
     print("Preprocess Successful!!!! \tTime Taken of Preprocess is :", round((end1 - start1), 4), "Seconds")
     # Cluster processing
     start_time = time.time()
+    node_parts_weight = torch.tensor(node_parts_weight, dtype=torch.int32)
     node_parts_weight = node_parts_weight.clone().detach()  # Fix UserWarning
     unique_values, inverse_indices = node_parts_weight.unique(return_inverse=True)
     num_unique_values = unique_values.size(0)

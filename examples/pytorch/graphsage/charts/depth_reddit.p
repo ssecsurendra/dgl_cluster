@@ -32,7 +32,7 @@ set ytics font "Arial,60 italic bold"
 #set xrange [-0.6:2.7]  # Adjust this range to remove extra space on the left side
 
 # Plot the data from a text file
-plot 'depth_reddit.txt' using 2:xtic(1) title 'GraphSAGE' lt rgb "skyblue", \
+plot 'depth_reddit.txt' using 2:xtic(1) title 'DGL' lt rgb "skyblue", \
      '' using 3 title 'CLING' lt rgb "orange"
      #'' using 4 title 'F:20' lt rgb "forest-green"
 # Close the output file

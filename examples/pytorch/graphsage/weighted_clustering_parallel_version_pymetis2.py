@@ -4,6 +4,10 @@ import sys
 import dgl
 import time
 import torch as th
+import pymetis
+import ctypes
+import numpy as np 
+import torch.nn as nn
 #import gc
 from scipy.io import mmread
 import os
@@ -13,12 +17,14 @@ import psutil
 import argparse
 os.environ["DGLBACKEND"] = "pytorch"
 import torch.nn.functional as F
+import torchmetrics.functional as MF
 import torch
 import math
 import copy
 import random
 import pymetis
 import dgl.data
+# from . import backend as F, utils
 from dgl import AddSelfLoop
 from dgl.data import AsNodePredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
@@ -78,12 +84,137 @@ void similarity_kernel(
         //int union_count = (src_end - src_start) + (dst_end - dst_start) - intersection;
 
         float jaccard = count_union > 0 ? (float)count_intersection / count_union : 0.0f;
-
+        //std::cout<<"jaccard:"<<jaccard<<"\n";
+        //printf("jaccard: %f\n",jaccard);
+        //edge_weights[e] = (jaccard)*50;
+        //edge_weights[e] = 100;
         edge_weights[e] = (cosine + jaccard)*50;
 
    }
    }
 ''', 'similarity_kernel')
+
+# --- Load METIS shared library ---
+libmetis = ctypes.cdll.LoadLibrary("/usr/lib/x86_64-linux-gnu/libmetis.so.5")
+
+# --- Types ---
+idx_t = ctypes.c_int32     # change to c_int64 if METIS compiled with 64-bit
+real_t = ctypes.c_float    # METIS default real type
+
+# --- METIS function prototypes ---
+METIS_SetDefaultOptions = libmetis.METIS_SetDefaultOptions
+METIS_SetDefaultOptions.restype = None
+METIS_SetDefaultOptions.argtypes = [ctypes.POINTER(idx_t)]
+
+METIS_PartGraphKway = libmetis.METIS_PartGraphKway
+METIS_PartGraphKway.restype = ctypes.c_int
+METIS_PartGraphKway.argtypes = [
+    ctypes.POINTER(idx_t),   # nvtxs
+    ctypes.POINTER(idx_t),   # ncon
+    ctypes.POINTER(idx_t),   # xadj
+    ctypes.POINTER(idx_t),   # adjncy
+    ctypes.POINTER(idx_t),   # vwgt
+    ctypes.POINTER(idx_t),   # vsize
+    ctypes.POINTER(idx_t),   # adjwgt
+    ctypes.POINTER(idx_t),   # nparts
+    ctypes.POINTER(real_t),  # tpwgts
+    ctypes.POINTER(real_t),  # ubvec
+    ctypes.POINTER(idx_t),   # options
+    ctypes.POINTER(idx_t),   # objval
+    ctypes.POINTER(idx_t)    # part
+]
+
+# --- METIS Option indices ---
+METIS_OPTION_PTYPE   = 1
+METIS_OPTION_OBJTYPE = 2
+METIS_OPTION_CTYPE   = 3
+METIS_OPTION_NCUTS   = 10
+METIS_OPTION_SEED    = 11
+
+# --- METIS option values ---
+# PTYPE
+METIS_PTYPE_RB   = 0
+METIS_PTYPE_KWAY = 1
+
+# OBJTYPE
+METIS_OBJTYPE_CUT = 0
+METIS_OBJTYPE_VOL = 1
+
+# CTYPE
+METIS_CTYPE_RM   = 0
+METIS_CTYPE_SHEM = 1
+
+# --- Wrapper function ---
+def metis_partition(args, xadj, adjncy, nparts, adjwgt=None):
+    nvtxs = idx_t(len(xadj) - 1)
+    ncon = idx_t(1)
+
+    # Convert numpy arrays to ctypes
+    xadj_c = xadj.ctypes.data_as(ctypes.POINTER(idx_t))
+    adjncy_c = adjncy.ctypes.data_as(ctypes.POINTER(idx_t))
+
+    vwgt = None
+    vsize = None
+
+    # Edge weights
+    if adjwgt is not None:
+        adjwgt_c = adjwgt.ctypes.data_as(ctypes.POINTER(idx_t))
+    else:
+        adjwgt_c = None
+
+    nparts_c = idx_t(nparts)
+
+    # Target partition weights (uniform)
+    # tpwgts = (real_t * (nparts * 1))()
+    # for i in range(nparts):
+    #     tpwgts[i] = 1.0 / nparts
+
+    # Imbalance tolerance
+    # ubvec = (real_t * 1)(1.05)
+
+    tpwgts = None
+    ubvec = None
+    obj_cut = True  # True for edge-cut, False for total communication volume
+
+    options = (idx_t * 40)()
+    METIS_SetDefaultOptions(options)
+
+    # Map CLI args to METIS constants
+    ptype_map = {"rb": METIS_PTYPE_RB, "kway": METIS_PTYPE_KWAY}
+    objtype_map = {"cut": METIS_OBJTYPE_CUT, "vol": METIS_OBJTYPE_VOL}
+    ctype_map = {"rm": METIS_CTYPE_RM, "shem": METIS_CTYPE_SHEM}
+
+    # options[METIS_OPTION_PTYPE]   = ptype_map[args.ptype]
+    options[METIS_OPTION_OBJTYPE] = objtype_map[args.objtype]
+    options[METIS_OPTION_CTYPE]   = ctype_map[args.ctype]
+    # options[METIS_OPTION_NCUTS]   = 5
+    # options[METIS_OPTION_SEED]    = 42
+    objval = idx_t()
+    part = (idx_t * (len(xadj) - 1))()
+
+    # # --- Call METIS ---
+    status = METIS_PartGraphKway(
+        ctypes.byref(nvtxs),
+        ctypes.byref(ncon),
+        xadj_c,
+        adjncy_c,
+        vwgt,
+        vsize,
+        adjwgt_c,    # ✅ edge weights passed here
+        ctypes.byref(nparts_c),
+        tpwgts,
+        ubvec,
+        options,
+        ctypes.byref(objval),
+        part
+    )
+
+    if status != 1:  # METIS_OK = 1
+        raise RuntimeError(f"METIS failed with status {status}")
+
+    return np.frombuffer(part, dtype=np.int32, count=len(xadj)-1), objval.value
+
+
 
 # ------------------------------------- Graph CONSTRUCTION USING data ----------------#
 totalTime = 0
@@ -109,6 +240,14 @@ if __name__ == "__main__":
         default="float",
         help="data type (float, bfloat16)",
     )
+    parser.add_argument(
+        "--undirected",
+        action="store_true",
+        help="turn the graph into an undirected graph.",
+    )
+    parser.add_argument("--ptype", choices=["rb", "kway"], default="kway")
+    parser.add_argument("--objtype", choices=["cut", "vol"], default="cut")
+    parser.add_argument("--ctype", choices=["rm", "shem"], default="shem")
     args = parser.parse_args()
     print(f"Training with DGL built-in GraphConv module.")
 
@@ -324,23 +463,44 @@ if __name__ == "__main__":
 
     # Convert weight_vector back to PyTorch for DGL compatibility
     ##weight_vector_torch = th.tensor(cp.asnumpy(weight_vector), dtype=th.int64)
-    weight_vector_torch = th.tensor(cp.asnumpy(edge_weights))
-    G.edata['weight'] = weight_vector_torch
+    #print("edge_weight type: ",type(edge_weights))
+    # Step 1: clip values to be >= 1
+    edge_weights = cp.clip(edge_weights, 1, None)
+    weight_vector_np = edge_weights.astype(cp.int32).get()   # or cp.asnumpy(...)
+    #weight_vector_torch = th.tensor(cp.asnumpy(edge_weights), dtype=th.int32)
+    print("edge_weight type: ",type(weight_vector_np))
+    #print("weight vector: ",weight_vector_torch)
+    #G.edata['weight'] = weight_vector_torch
+    #G.edata['w'] = weight_vector_torch
+    if args.undirected:
+        start = time.time()
+        sym_g = dgl.to_bidirected(G)
+        for key in G.ndata:
+            sym_g.ndata[key] = G.ndata[key]
+        G = sym_g 
+        print("Convert a graph into a bidirected graph: {:.3f} seconds".format(
+            time.time() - start
+        ))
 
-    # Convert to lists for PyMetis
-    # xadj = cp.asnumpy(row_ptr).tolist()
-    # adjncy = cp.asnumpy(col_idx).tolist()
-    # adjwgt = cp.asnumpy(weight_vector).tolist()
-
+    xadj = np.array(G.adj_tensors('csr')[0])
+    adjncy = np.array(G.adj_tensors('csr')[1])
+    xadj = xadj.astype(np.int32, copy=False)
+    adjncy = adjncy.astype(np.int32, copy=False)
     nopart = args.num_clusters
     print("Start Partitioning Weight_graph.....")
     start = time.time()
-    try:
-        node_parts_weight = dgl.metis_partition_assignment(G, nopart)
-    except Exception as e:
-        print(f"METIS partitioning failed: {e}")
-        sys.exit(1)
+    #try:
+    #node_parts_weight = dgl.metis_partition_assignment(G, nopart, balance_edges=True)
+    node_parts_weight, edgecut = metis_partition(args, xadj, adjncy, nparts=nopart, adjwgt=weight_vector_np)
+    print(node_parts_weight)
+    # Convert to PyTorch tensor
+    node_parts_weight = th.from_numpy(node_parts_weight)
+    # node_parts_weight = node_parts_weight.tolist()
+    # except Exception as e:
+    #   print(f"METIS partitioning failed: {e}")
+    #   sys.exit(1)
     end = time.time()
+    #print(type(node_parts_weight))
     #totalTime = totalTime + (end - start)
     print("Partition is Done !!!!!\t Time of Partition is :", round((end - start), 4), "Seconds")
     mem_usage = (psutil.Process().memory_info().rss) / (1024 * 1024 * 1024)
@@ -357,7 +517,7 @@ if __name__ == "__main__":
     # Free CuPy memory
     #del row_ptr, col_idx, node_feature_cupy, cosine_similarities, jaccard_similarity, weight_vector, weight_vector1, edges_src, edges_dst
     #del row_ptr, col_idx, weight_vector, weight_numpy_array
-    del row_ptr, col_idx, weight_vector_torch
+    del row_ptr, col_idx, weight_vector_np
     #del row_ptr, col_idx, weight_vector
     cp._default_memory_pool.free_all_blocks()
 
@@ -365,6 +525,7 @@ if __name__ == "__main__":
     print("Preprocess Successful!!!! \tTime Taken of Preprocess is :", round((end1 - start1), 4), "Seconds")
     # Cluster processing
     start_time = time.time()
+    # node_parts_weight = torch.tensor(node_parts_weight, dtype=torch.int32)
     node_parts_weight = node_parts_weight.clone().detach()  # Fix UserWarning
     unique_values, inverse_indices = node_parts_weight.unique(return_inverse=True)
     num_unique_values = unique_values.size(0)

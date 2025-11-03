@@ -38,6 +38,8 @@ def metis_partition(G, dataset_name=None, fan=None):
         #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
         #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/aniket/cluster_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
         file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
+        #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/old_cluster/'+ dataset_name + '/'+ 'cluster_id.txt',names=columns)
+        #file = pd.read_csv('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_float_' + fan + '/' + dataset_name + '_cluster_id.txt',names=columns)
         #print("This might a take while..")
         #print(file.head())
         Data=file['Data']
@@ -108,7 +110,9 @@ def get_representative_array(G, dataset_name=None, fan=None):
         #print(Data.shape)
         #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_' + fan + '/' + dataset_name + '_representative.npy')
         #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/aniket/cluster_' + fan + '/' + dataset_name + '_representative.npy')
+        #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_float_' + fan + '/' + dataset_name + '_representative.npy')
         loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_' + fan + '/' + dataset_name + '_representative.npy')
+        #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/old_cluster/'+ dataset_name + '/'+ 'representative.npy')
         #loaded_array = np.load('/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster/representative.npy')
         #print(loaded_array.shape)
         #print(loaded_array)

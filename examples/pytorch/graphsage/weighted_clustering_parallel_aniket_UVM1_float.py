@@ -77,9 +77,12 @@ void similarity_kernel(
         int count_union = (indptr[src + 1] - indptr[src]) + (indptr[dst + 1] - indptr[dst]) - count_intersection;
         //int union_count = (src_end - src_start) + (dst_end - dst_start) - intersection;
 
-        float jaccard = count_union > 0 ? (float)count_intersection / count_union : 0.0f;
+        float jaccard = count_union > 0 ? ((float)count_intersection / count_union) : 0.0f;
 
-        edge_weights[e] = (cosine + jaccard)*50;
+        edge_weights[e] = (cosine + jaccard)/2;
+        //printf("edge_weights:%f\n",edge_weights[e]);
+        //if(edge_weights[e]>1)
+          printf("weight:%f, cosine:%f, jaccard:%f, src=%d, dst=%d\n",edge_weights[e],cosine,jaccard,src,dst);
 
    }
    }
@@ -323,7 +326,6 @@ if __name__ == "__main__":
     #print("Weight calculation times: ", end_time - start_time)
 
     # Convert weight_vector back to PyTorch for DGL compatibility
-    ##weight_vector_torch = th.tensor(cp.asnumpy(weight_vector), dtype=th.int64)
     weight_vector_torch = th.tensor(cp.asnumpy(edge_weights))
     G.edata['weight'] = weight_vector_torch
 
@@ -346,19 +348,18 @@ if __name__ == "__main__":
     mem_usage = (psutil.Process().memory_info().rss) / (1024 * 1024 * 1024)
     print(f"Current memory usage: {mem_usage} GB")
     # Convert to NumPy array
-    # weight_numpy_array = weight_vector.get()
-    #
-    # file_path3 = f'/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_{args.num_clusters}/{args.dataset}_weight_vector.txt'
-    # os.makedirs(os.path.dirname(file_path3), exist_ok=True)
-    # with open(file_path3, "w") as file:
-    #     for value in weight_numpy_array:
-    #         file.write(f"{value}\n") 
+    weight_numpy_array = edge_weights.get()
+
+    file_path3 = f'/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_float_{args.num_clusters}/{args.dataset}_weight_vector.txt'
+    os.makedirs(os.path.dirname(file_path3), exist_ok=True)
+    with open(file_path3, "w") as file:
+        for value in weight_numpy_array:
+            file.write(f"{value}\n") 
 
     # Free CuPy memory
     #del row_ptr, col_idx, node_feature_cupy, cosine_similarities, jaccard_similarity, weight_vector, weight_vector1, edges_src, edges_dst
     #del row_ptr, col_idx, weight_vector, weight_numpy_array
-    del row_ptr, col_idx, weight_vector_torch
-    #del row_ptr, col_idx, weight_vector
+    del row_ptr, col_idx, weight_numpy_array
     cp._default_memory_pool.free_all_blocks()
 
     end1 = time.time()
@@ -397,12 +398,12 @@ if __name__ == "__main__":
     print("Total time", total_end-total_start, "Seconds")
     representative = representative.tolist()
     np_representative = np.array(representative)
-    file_path2 = f'/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_{args.num_clusters}/{args.dataset}_representative.npy'
+    file_path2 = f'/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_float_{args.num_clusters}/{args.dataset}_representative.npy'
     os.makedirs(os.path.dirname(file_path2), exist_ok=True)
     np.save(file_path2, np_representative)
 
     node_parts_weight = node_parts_weight.tolist()
-    file_path1 = f'/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_{args.num_clusters}/{args.dataset}_cluster_id.txt'
+    file_path1 = f'/data/surendra/workspace/dgl_cluster/python/dgl/sampling/cluster_cupy_float_{args.num_clusters}/{args.dataset}_cluster_id.txt'
     os.makedirs(os.path.dirname(file_path1), exist_ok=True)
     with open(file_path1, "w") as file:
         for value in node_parts_weight:

@@ -34,7 +34,7 @@ set ytics font "Arial,65 italic bold"
 set yrange [0:]
 set ytics 50
 # Plot the data from a text file
-plot 'reddit_fanout.txt' using 2:xtic(1) title 'GraphSAGE' lt rgb "skyblue", \
+plot 'reddit_fanout.txt' using 2:xtic(1) title 'DGL' lt rgb "skyblue", \
      '' using 3 title 'CLING' lt rgb "orange"
      #'' using 4 title 'F:20' lt rgb "forest-green"
 # Close the output file

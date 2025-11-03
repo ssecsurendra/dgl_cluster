@@ -1,22 +1,19 @@
-# Set the terminal and output file
-#set terminal postscript eps enhanced color solid font 'Arial' size 14,6.0
 #set terminal pdfcairo size 10cm,7cm enhanced font 'Arial,12.5'
-#set output 'products_batch_F15.pdf'
+#set output 'products_fanout.pdf'
 # Set terminal to EPS and output file name
-set terminal postscript eps enhanced color solid font 'Helvetica,25' size 9,6.0
-#set terminal postscript eps enhanced color font 'Helvetica,10'
-set output 'products_batch_F15.eps'
+set terminal postscript eps enhanced color solid font 'Helvetica,25' size 8,6.0
+#set terminal postscript eps enhanced color solid font 'Helvetica,25'
+set output 'yelp_fanout.eps'
 set boxwidth 0.9 absolute
 set style fill solid 1.00 border lt -1
 # Set the legend (key) font
-set key inside top right vertical font "Arial,60"  # Adjust the font size as needed
+set key inside top left vertical font "Arial,65"  # Adjust the font size as needed
 # Set the labels (no title)
 set tmargin 2
-set xlabel "Batch Size" font "Arial,55 italic bold" offset 0,-3
-set bmargin 8
-set ylabel "Total time (Seconds)" font "Arial,55 italic bold" offset -3
-set lmargin 12
-
+set xlabel "Fanout" font "Arial,65 italic bold" offset 0,-2
+set bmargin 7
+set ylabel "Total time (Seconds)" font "Arial,65 italic bold" offset -6
+set lmargin 15
 # Define bar style and width
 set style data histograms
 set style histogram cluster gap 1
@@ -28,16 +25,16 @@ set grid ytics
 
 # Set xtics (x-axis labels) from the first column (no rotation)
 set xtics nomirror
-set xtics font "Arial,60 italic bold"
-set ytics font "Arial,60 italic bold"
-set xtics rotate by -45
-# Remove extra space between Y-axis and first bar by setting x range
-#set xrange [-0.9:3.5]  # Adjust this range to remove extra space on the left side
-#set xrange [-0.6:2.7]  # Adjust this range to remove extra space on the left side
-set ytics 100
+set xtics font "Arial,65 italic bold" offset 0,-1
+set ytics font "Arial,65 italic bold"
 
+# Remove extra space between Y-axis and first bar by setting x range
+#set xrange [-0.1:3.7]  # Adjust this range to remove extra space on the left side
+#set xrange [-0.6:2.7]  # Adjust this range to remove extra space on the left side
+set yrange [0:550]
+set ytics 100
 # Plot the data from a text file
-plot 'product_batch_15.txt' using 2:xtic(1) title 'DGL' lt rgb "skyblue", \
+plot 'yelp_fanout.txt' using 2:xtic(1) title 'DGL' lt rgb "skyblue", \
      '' using 3 title 'CLING' lt rgb "orange"
      #'' using 4 title 'F:20' lt rgb "forest-green"
 # Close the output file

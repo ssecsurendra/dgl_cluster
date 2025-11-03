@@ -35,9 +35,9 @@ set ytics 10
 plot 'SM_throughput_product.dat' using 0:1 every ::2 with linespoints title 'CLING Layer 1' lt 1 lw 2 lc rgb 'blue' pt 2, \
      '' using 0:2 every ::2 with linespoints title 'CLING Layer 2' lt 1 lw 2 lc rgb 'blue' pt 5, \
      '' using 0:3 every ::2 with linespoints title 'CLING Layer 3' lt 1 lw 2 lc rgb 'blue' pt 1, \
-     '' using 0:4 every ::2 with linespoints title 'GraphSAGE Layer 1' lt 1 lw 2 lc rgb 'purple' pt 2, \
-     '' using 0:5 every ::2 with linespoints title 'GraphSAGE Layer 2' lt 1 lw 2 lc rgb 'purple' pt 5, \
-     '' using 0:6 every ::2 with linespoints title 'GraphSAGE Layer 3' lt 1 lw 2 lc rgb 'purple' pt 1
+     '' using 0:4 every ::2 with linespoints title 'DGL Layer 1' lt 1 lw 2 lc rgb 'purple' pt 2, \
+     '' using 0:5 every ::2 with linespoints title 'DGL Layer 2' lt 1 lw 2 lc rgb 'purple' pt 5, \
+     '' using 0:6 every ::2 with linespoints title 'DGL Layer 3' lt 1 lw 2 lc rgb 'purple' pt 1
 
 #plot 'accuracy_line_product.txt' using 0:1 with linespoints title 'CLING' lw 4 lc rgb 'blue' pt 12, \
 #     '' using 0:2 with linespoints title 'GraphSAGE' lw 4 lc rgb 'red' pt 12
